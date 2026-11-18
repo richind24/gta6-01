@@ -2,18 +2,96 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cobalt Vice: Port Meridian</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07131f; color: #eaf7ff; font-family: Inter, system-ui, Arial, sans-serif; }
+  #game { display: block; width: 100vw; height: 100vh; }
+  .hud { position: fixed; z-index: 3; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+  #hud-topleft { top: 14px; left: 16px; font-size: 20px; font-weight: 800; }
+  #hud-money { color: #7dff8a; letter-spacing: 0.04em; }
+  #hud-stars { color: #ffd23c; font-size: 22px; letter-spacing: 2px; }
+  #hud-topright { top: 14px; right: 16px; text-align: right; font-size: 16px; font-weight: 700; }
+  #hud-mission-box { top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #hud-mission { font-size: 18px; font-weight: 800; letter-spacing: 0.12em; color: #ffd23c; }
+  #hud-objective { font-size: 14px; color: #d7ecff; margin-top: 2px; }
+  #hud-bottomleft { bottom: 16px; left: 16px; }
+  #minimap { width: 180px; height: 180px; border: 2px solid rgba(255,255,255,0.55); border-radius: 50%; background: #0a1626; box-shadow: 0 0 18px rgba(0,0,0,0.6); }
+  #hud-hpbar { width: 180px; height: 10px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.5); margin-top: 8px; }
+  #hud-hp { height: 100%; width: 100%; background: #35d05a; }
+  #hud-bottomright { bottom: 16px; right: 18px; text-align: right; }
+  #hud-speed { font-size: 34px; font-weight: 800; }
+  #hud-weapon { font-size: 15px; font-weight: 700; color: #ffd23c; }
+  #toast { top: 22%; left: 50%; transform: translateX(-50%); font-size: 17px; font-weight: 700; background: rgba(4, 18, 30, 0.75); padding: 10px 22px; border: 1px solid rgba(255,210,60,0.5); border-radius: 6px; opacity: 0; transition: opacity 0.4s; white-space: nowrap; }
+  #banner { top: 32%; left: 50%; transform: translateX(-50%); font-size: 30px; font-weight: 900; letter-spacing: 0.1em; color: #ffd23c; opacity: 0; transition: opacity 0.4s; white-space: nowrap; }
+  #boot { position: fixed; inset: 0; display: grid; place-items: center; background: linear-gradient(135deg, #091b2a, #0d5270 60%, #0a3a55); z-index: 10; }
+  #boot .panel { max-width: 760px; padding: 42px; text-align: center; background: rgba(7, 19, 30, 0.9); border: 1px solid rgba(102, 233, 255, 0.5); box-shadow: 0 0 60px rgba(42, 213, 255, 0.25); }
+  #boot h1 { margin: 0; font-size: clamp(38px, 7vw, 84px); letter-spacing: 0.08em; color: #fff; text-shadow: 0 0 24px #31dfff; }
+  #boot .sub { color: #74d8e8; letter-spacing: 0.3em; text-transform: uppercase; margin: 10px 0 26px; }
+  #boot button { background: #24c7dc; color: #06131b; border: 0; padding: 15px 32px; font-weight: 800; letter-spacing: 0.1em; cursor: pointer; font-size: 16px; margin: 4px; }
+  #boot button:hover { background: #54dcf0; }
+  #boot .help { font-size: 13px; color: #9fc2d3; margin-top: 24px; line-height: 1.7; }
+  #shop { display: none; position: fixed; z-index: 8; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 420px; background: rgba(7, 19, 30, 0.96); border: 1px solid #ff5a3c; padding: 22px; pointer-events: auto; }
+  #shop h2 { margin: 0 0 8px; color: #ff5a3c; letter-spacing: 0.1em; }
+  #shop .shop-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.12); font-size: 15px; }
+  #shop button { background: #ffd23c; border: 0; padding: 7px 14px; font-weight: 800; cursor: pointer; }
+  #shop .hint { font-size: 12px; color: #9fc2d3; }
+  #bigmap { display: none; position: fixed; inset: 0; z-index: 7; background: rgba(4, 12, 20, 0.92); text-align: center; padding-top: 40px; }
+  #bigmap-canvas { width: min(80vh, 80vw); height: min(80vh, 80vw); border: 2px solid rgba(255,255,255,0.5); }
+  #bigmap p { color: #9fc2d3; }
+  #test-status { display: none; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
-<script type="module" src="./src/main.js"></script>
+<canvas id="game"></canvas>
+
+<div class="hud" id="hud-topleft">
+  <div id="hud-money">$500</div>
+  <div id="hud-stars">☆☆☆☆☆</div>
+</div>
+<div class="hud" id="hud-topright"><div id="hud-clock">12:42 • CLEAR</div></div>
+<div class="hud" id="hud-mission-box">
+  <div id="hud-mission">PORT MERIDIAN</div>
+  <div id="hud-objective">Welcome to the city.</div>
+</div>
+<div class="hud" id="hud-bottomleft">
+  <canvas id="minimap" width="180" height="180"></canvas>
+  <div id="hud-hpbar"><div id="hud-hp"></div></div>
+</div>
+<div class="hud" id="hud-bottomright">
+  <div id="hud-weapon">Fists</div>
+  <div id="hud-speed">0 km/h</div>
+</div>
+<div class="hud" id="toast"></div>
+<div class="hud" id="banner"></div>
+
+<div id="boot">
+  <div class="panel">
+    <h1>COBALT VICE</h1>
+    <div class="sub">Port Meridian // Open World</div>
+    <p>Build a crew, steal the skyline, and own the night. Eight story missions, side jobs, properties, and a police force that never forgets.</p>
+    <button id="start">ENTER THE CITY</button>
+    <button id="continue" style="display:none">CONTINUE SAVED GAME</button>
+    <div class="help">WASD drive / walk &nbsp;·&nbsp; E enter vehicle / interact &nbsp;·&nbsp; Mouse aim, Click fire &nbsp;·&nbsp; Space handbrake &nbsp;·&nbsp; 1–5 weapons &nbsp;·&nbsp; R lay low &nbsp;·&nbsp; L save &nbsp;·&nbsp; M map &nbsp;·&nbsp; P pause</div>
+  </div>
+</div>
+
+<div id="shop"><div id="shop-list"></div></div>
+<div id="bigmap"><canvas id="bigmap-canvas" width="640" height="640"></canvas><p>Press M to close the map</p></div>
+<div id="test-status"></div>
+
+<script src="./vendor/three.min.js"></script>
+<script src="./src/state.js"></script>
+<script src="./src/audio.js"></script>
+<script src="./src/world.js"></script>
+<script src="./src/vehicles.js"></script>
+<script src="./src/ai.js"></script>
+<script src="./src/combat.js"></script>
+<script src="./src/missions.js"></script>
+<script src="./src/economy.js"></script>
+<script src="./src/hud.js"></script>
+<script src="./src/shots.js"></script>
+<script src="./src/main.js"></script>
 </body>
 </html>

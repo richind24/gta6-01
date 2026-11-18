@@ -1,79 +1,75 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
-
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
-
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
+// Cobalt Vice — ?shot= scene presets for screenshots (cover/mission/city/harbor).
+function applyShot(name) {
+  G.time = 12.0; // bright noon for every shot
+  G.weather = 0;
+  const placeCar = (x, z, a) => {
+    const mesh = makeCarMesh(0xe44e61, false);
+    mesh.position.set(x, 0, z);
+    G.scene.add(mesh);
+    const car = { mesh, x, z, a, v: 18, road: 0, axis: 'x', dir: 1, speed: 0, player: true };
+    G.world.traffic.push(car);
+    G.vehicle = car;
+    G.mode = 'car';
+    G.player.mesh.visible = false;
+    G.player.x = x;
+    G.player.z = z;
+    G.player.a = a;
+    return car;
+  };
+  if (name === 'cover') {
+    // Daylight police pursuit down a downtown avenue: player speeding, cop cars
+    // ahead cutting across and one chasing from behind, beacon down the road.
+    placeCar(300, -230, -Math.PI / 2);
+    G.vehicle.v = 25;
+    G.keys['w'] = true;
+    G.wanted = 4;
+    G.mission = { index: 0, title: 'POLICE PURSUIT', obj: 'Lose the Meridian precinct units', type: 'goto', marker: [300, -600], t: 0 };
+    makeBeacon(300, -600, 0xffd23c);
+    const copSpots = [[292, -310, -Math.PI / 2], [308, -360, Math.PI / 2], [340, -160, -Math.PI / 2]];
+    for (let i = 0; i < copSpots.length; i++) {
+      const [cx, cz, ca] = copSpots[i];
+      const mesh = makeCarMesh(0x11151a, true);
+      mesh.position.set(cx, 0, cz);
+      G.scene.add(mesh);
+      G.world.cops.push({ mesh, x: cx, z: cz, a: ca, v: 40, health: 100, lightT: i });
     }
+    G.money = 18450;
+    toast('POLICE PURSUIT — lose them');
+  } else if (name === 'mission') {
+    // Story mission 2 in progress, player on foot near the helipad, facing it.
+    G.player.x = -620;
+    G.player.z = 620;
+    G.player.a = Math.PI * 0.75;
+    G.player.mesh.position.set(-620, 0, 620);
+    G.wanted = 2;
+    G.money = 12300;
+    startMission(1);
+  } else if (name === 'city') {
+    // Free roam on foot on the plaza, facing the Meridian Exchange tower.
+    G.player.x = 0;
+    G.player.z = 60;
+    G.player.a = -Math.PI / 2;
+    G.player.mesh.position.set(0, 0, 60);
+    G.wanted = 1;
+    G.money = 8450;
+    toast('FREE ROAM — explore Port Meridian');
+  } else if (name === 'harbor') {
+    // Boat run at the marina.
+    const mesh = makeBoatMesh(0xf2bd51);
+    mesh.position.set(780, 0, -300);
+    G.scene.add(mesh);
+    const boat = { mesh, x: 780, z: -300, a: Math.PI / 2, v: 12, player: true, moored: false };
+    G.world.boats.push(boat);
+    G.vehicle = boat;
+    G.mode = 'boat';
+    G.player.mesh.visible = false;
+    G.player.x = 780;
+    G.player.z = -300;
+    G.player.a = Math.PI / 2;
+    G.wanted = 2;
+    G.money = 15200;
+    G.mission = { index: 3, title: 'TIDE TURNER', obj: 'Deliver the package to the marina', type: 'goto', marker: [850, -300], t: 0 };
+    makeBeacon(850, -300, 0xffd23c);
   }
-  return Infinity;
-}
-
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
-  }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
-}
-
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
-  }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
-  }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  G.camA = G.player.a;
 }
