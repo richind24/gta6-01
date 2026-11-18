@@ -1,53 +1,44 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Input: keyboard state, mouse orbit (drag), click-to-shoot, wheel zoom.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
-
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
-
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
-
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
-
-  return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
+export function createInput(G) {
+  const input = {
+    up: false, down: false, left: false, right: false, shift: false,
+    mouseDX: 0, mouseDY: 0, shooting: false, dragging: false,
+    pressed: {}, // edge-triggered keys, consumed by the game loop
   };
+  const keyMap = {
+    KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down',
+    KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
+    ShiftLeft: 'shift', ShiftRight: 'shift',
+  };
+  window.addEventListener('keydown', (e) => {
+    if (keyMap[e.code] !== undefined) { input[keyMap[e.code]] = true; e.preventDefault(); }
+    if (!e.repeat) input.pressed[e.code] = true;
+    if (['Space', 'KeyE', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyM', 'Escape', 'Enter'].includes(e.code)) e.preventDefault();
+  });
+  window.addEventListener('keyup', (e) => {
+    if (keyMap[e.code] !== undefined) input[keyMap[e.code]] = false;
+  });
+  const canvas = document.getElementById('game');
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0) { input.shooting = true; input.dragging = true; }
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (e.button === 0) { input.shooting = false; input.dragging = false; }
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (input.dragging) {
+      input.mouseDX += e.movementX || 0;
+      input.mouseDY += e.movementY || 0;
+    }
+  });
+  canvas.addEventListener('wheel', (e) => {
+    G.player.camDist = Math.max(4.5, Math.min(13, G.player.camDist + Math.sign(e.deltaY) * 0.8));
+    e.preventDefault();
+  }, { passive: false });
+  window.addEventListener('blur', () => {
+    input.up = input.down = input.left = input.right = input.shift = false;
+    input.shooting = false; input.dragging = false;
+  });
+  return input;
 }

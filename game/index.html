@@ -3,17 +3,85 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Solara Bay — Open-World Crime Sandbox</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1026; font-family: 'Segoe UI', Arial, sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .hud { position: fixed; z-index: 5; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none; user-select: none; }
+  #hud-top-right { top: 14px; right: 16px; text-align: right; }
+  #hud-money { font-size: 30px; font-weight: 800; color: #7dff8a; }
+  #hud-stars { font-size: 26px; letter-spacing: 3px; margin-top: 2px; }
+  #hud-clock { font-size: 14px; opacity: .9; margin-top: 4px; }
+  #hud-top-left { top: 14px; left: 16px; max-width: 430px; }
+  #hud-objective { font-size: 16px; font-weight: 600; background: rgba(0,0,0,.45); padding: 8px 12px; border-radius: 8px; border-left: 4px solid #ffd21f; }
+  #hud-flash { margin-top: 10px; font-size: 15px; font-weight: 700; color: #ffd21f; opacity: 0; transition: opacity .3s; }
+  #hud-bottom-left { left: 16px; bottom: 16px; }
+  #minimap { width: 190px; height: 190px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); box-shadow: 0 2px 12px rgba(0,0,0,.6); }
+  #hud-bottom-right { right: 16px; bottom: 16px; text-align: right; }
+  #hud-speed { font-size: 34px; font-weight: 800; display: none; }
+  #hud-health-wrap { width: 210px; margin-top: 8px; }
+  #hud-health-bar { height: 12px; background: rgba(0,0,0,.55); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,.4); }
+  #hud-health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5a3c, #ffd21f); transition: width .2s; }
+  #hud-health-text { font-size: 13px; margin-top: 3px; text-align: right; }
+  #hud-weapon { font-size: 15px; font-weight: 700; margin-top: 6px; }
+  #hud-prompt { left: 50%; bottom: 92px; transform: translateX(-50%); font-size: 16px; font-weight: 700; background: rgba(0,0,0,.55); padding: 7px 14px; border-radius: 8px; }
+  #crosshair { left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 22px; color: rgba(255,255,255,.9); display: none; }
+  #mission-card { left: 50%; top: 22%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity .4s; }
+  #mission-card-title { font-size: 34px; font-weight: 900; letter-spacing: 2px; color: #ffd21f; }
+  #mission-card-text { font-size: 16px; margin-top: 6px; max-width: 520px; background: rgba(0,0,0,.55); padding: 10px 16px; border-radius: 10px; }
+  #damage-flash { position: fixed; inset: 0; z-index: 4; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,.55) 100%); opacity: 0; transition: opacity .15s; }
+  #menu { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; flex-direction: column; background: linear-gradient(180deg, rgba(5,10,25,.82), rgba(20,8,20,.88)); color: #fff; text-align: center; }
+  #menu-title { font-size: 54px; font-weight: 900; letter-spacing: 6px; color: #ffd21f; text-shadow: 0 4px 24px rgba(255,210,31,.35); }
+  #menu-text { font-size: 16px; line-height: 1.6; max-width: 620px; margin: 14px 0 22px; color: #e8ecf2; }
+  #menu-buttons { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  #menu-buttons button, .shop-row button, #shop-close { pointer-events: auto; cursor: pointer; font-size: 16px; font-weight: 700; color: #111; background: #ffd21f; border: none; border-radius: 8px; padding: 11px 26px; min-width: 280px; }
+  #menu-buttons button:hover, .shop-row button:hover:not(:disabled), #shop-close:hover { background: #ffe45e; }
+  .shop-row button:disabled { background: #888; color: #ddd; cursor: default; }
+  #shop { position: fixed; z-index: 11; display: none; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 480px; max-width: 92vw; background: rgba(12,16,28,.96); border: 1px solid #ffd21f; border-radius: 12px; padding: 20px; color: #fff; }
+  #shop h2 { margin: 0 0 12px; color: #ffd21f; }
+  .shop-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.12); font-size: 15px; }
+  .shop-row button { min-width: 90px; padding: 7px 12px; font-size: 14px; }
+  #shop-close { margin-top: 14px; min-width: 120px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<canvas id="game" aria-label="Solara Bay: open-world crime sandbox. Drive, explore the city, take missions."></canvas>
 <p id="status" role="status" aria-live="polite"></p>
+
+<div id="damage-flash"></div>
+<div class="hud" id="hud-top-right">
+  <div id="hud-money">$250</div>
+  <div id="hud-stars">☆☆☆☆☆</div>
+  <div id="hud-clock">Hari 1 — 10:00</div>
+</div>
+<div class="hud" id="hud-top-left">
+  <div id="hud-objective">▸ Pergi ke The Rusty Anchor untuk memulai cerita.</div>
+  <div id="hud-flash"></div>
+</div>
+<div class="hud" id="hud-bottom-left"><canvas id="minimap" width="190" height="190"></canvas></div>
+<div class="hud" id="hud-bottom-right">
+  <div id="hud-speed"></div>
+  <div id="hud-health-wrap"><div id="hud-health-bar"><div id="hud-health-fill"></div></div><div id="hud-health-text">HP 100</div></div>
+  <div id="hud-weapon">Fists • ∞</div>
+</div>
+<div class="hud" id="hud-prompt"></div>
+<div class="hud" id="crosshair">＋</div>
+<div class="hud" id="mission-card"><div id="mission-card-title"></div><div id="mission-card-text"></div></div>
+
+<div id="menu">
+  <div id="menu-title">SOLARA BAY</div>
+  <div id="menu-text"></div>
+  <div id="menu-buttons"></div>
+</div>
+
+<div id="shop">
+  <h2>Ironworks Arms — Toko Senjata</h2>
+  <div id="shop-list"></div>
+  <button id="shop-close">Tutup (Esc)</button>
+</div>
+
+<script src="./vendor/three.min.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
