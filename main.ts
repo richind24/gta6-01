@@ -2,6 +2,7 @@
 // Dax Rivers returns home to take Solara Bay back from the Kessler family.
 // The program below hands the game in: it copies game/ and screenshots/ to /output
 // and writes /output/dossier.json with the vendored make.fun library.
+// Run it with: mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
