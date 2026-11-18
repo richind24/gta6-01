@@ -1,5 +1,1 @@
-[
-  { "name": "1-start.jpg", "query": "?shot=start&seed=1" },
-  { "name": "2-play.jpg", "query": "?shot=play&seed=1" },
-  { "name": "3-end.jpg", "query": "?shot=end&seed=1" }
-]
+{"shots":[{"caption":"Daylight police pursuit — wanted 4, minimap, HUD and downtown Port Meridian","file":"1-cover.png","scene":"cover"},{"caption":"Story mission 2, The Glass Key — meet at the helipad","file":"2-mission.png","scene":"mission"},{"caption":"Free roam on foot in downtown Port Meridian at noon","file":"3-city.png","scene":"city"},{"caption":"Boat run at the marina — Tide Turner delivery","file":"4-harbor.png","scene":"harbor"}]}
