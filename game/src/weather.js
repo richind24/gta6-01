@@ -79,20 +79,20 @@ export function updateWeather(G, dt) {
   G.scene.fog.color.copy(fog);
   // sun position: arc across the sky
   const ang = (t - 0.25) * Math.PI * 2;
-  const sunH = Math.sin(ang);
-  w.sun.position.set(Math.cos(ang) * 220, Math.max(sunH, 0.08) * 260, 120);
+  const sunH = Math.max(Math.sin(ang), 0.16);
+  w.sun.position.set(Math.cos(ang) * 220, sunH * 260, 120);
   w.sun.target.position.set(G.player.x, 0, G.player.z);
   w.sun.position.x += G.player.x; w.sun.position.z += G.player.z;
   w.sun.target.updateMatrixWorld();
   w.sun.color.copy(sunCol);
   w.sun.intensity = sunI;
-  w.hemi.intensity = 0.25 + sunI * 0.35;
+  w.hemi.intensity = 0.42 + sunI * 0.32;
   const night = clamp(1 - sunI, 0, 1);
   w.night = night;
   // building windows glow at night
   for (const b of G.buildings) b.mat.emissiveIntensity = night * 0.85;
   for (const s of G.streetLights) {
-    s.glow.material.opacity = night * 0.8;
+    s.glow.material.opacity = night * 0.5;
     s.bulb.material.color.setHex(night > 0.4 ? 0xffe9a8 : 0x666666);
   }
   // rain scheduling

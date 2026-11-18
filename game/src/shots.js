@@ -12,8 +12,8 @@ export function applyShot(G, name) {
     // daytime police chase: player driving, wanted 3, two patrol cars behind
     setTimeOfDay(G, 14);
     G.weather.raining = false;
-    p.x = -30; p.z = 60; p.heading = 0; p.camYaw = 0;
-    const car = spawnCar(G, -30, 60, 0, { type: { name: 'Coupe', w: 1.9, l: 4.3, top: 40, accel: 19, grip: 1.1 }, color: 0xc0392b, driver: false });
+    p.x = -64; p.z = 32; p.heading = 0; p.camYaw = 0;
+    const car = spawnCar(G, -64, 32, 0, { type: { name: 'Coupe', w: 1.9, l: 4.3, top: 40, accel: 19, grip: 1.1 }, color: 0xc0392b, driver: false });
     car.speed = 24;
     enterCar(G, car);
     G.addWanted(3, 'polisi mengejarmu');
@@ -23,7 +23,7 @@ export function applyShot(G, name) {
     // on foot downtown at night, rain, neon windows
     setTimeOfDay(G, 22);
     G.weather.raining = true; G.weather.rainTimer = 300;
-    p.x = -8; p.z = 8; p.heading = Math.PI * 0.75; p.camYaw = Math.PI * 0.75;
+    p.x = -64; p.z = 8; p.heading = Math.PI * 0.75; p.camYaw = Math.PI * 0.75;
     p.weapon = 'pistol';
     G.hud.setObjective('Jelajahi Solara Bay di malam hari.');
   } else if (name === 'mission') {
@@ -37,7 +37,7 @@ export function applyShot(G, name) {
   } else if (name === 'harbor') {
     // wide view of the bay, pier and skyline at golden hour
     setTimeOfDay(G, 17.5);
-    p.x = 40; p.z = -240; p.heading = Math.PI * 0.9; p.camYaw = Math.PI * 0.9;
+    p.x = 0; p.z = -228; p.heading = Math.PI; p.camYaw = Math.PI;
     p.camDist = 12;
     G.hud.setObjective('Port Solara — pelabuhan milik keluarga Kessler.');
   } else if (name === 'onfoot') {

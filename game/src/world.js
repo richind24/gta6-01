@@ -148,7 +148,7 @@ export function buildCity(G) {
     bulb.position.set(lx + CITY.roadW / 2 - 0.9, 6.9, lz + CITY.roadW / 2 + 1.2);
     scene.add(bulb);
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: G.glowTex, color: 0xffe9a8, transparent: true, opacity: 0, depthWrite: false }));
-    glow.scale.set(6, 6, 1);
+    glow.scale.set(2.6, 2.6, 1);
     glow.position.copy(bulb.position);
     scene.add(glow);
     G.streetLights.push({ glow, bulb });

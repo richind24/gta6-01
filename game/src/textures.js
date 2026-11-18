@@ -65,11 +65,11 @@ export function groundTexture() {
   // central park block
   g.fillStyle = '#4d7a3d';
   g.fillRect(toPx(-CITY.block + CITY.roadW / 2), toPx(-CITY.block + CITY.roadW / 2), toPx(CITY.block - CITY.roadW / 2) - toPx(-CITY.block + CITY.roadW / 2), toPx(CITY.block - CITY.roadW / 2) - toPx(-CITY.block + CITY.roadW / 2));
-  // beach strip along the south edge
+  // beach strip along the south edge (z from -328 to waterAt+8)
   g.fillStyle = '#d9c48f';
-  g.fillRect(0, toPx(CITY.waterAt + 8), S, toPx(CITY.half + 40) - toPx(CITY.waterAt + 8));
+  g.fillRect(0, toPx(CITY.waterAt - 40), S, toPx(CITY.waterAt + 8) - toPx(CITY.waterAt - 40));
   // roads
-  g.fillStyle = '#33363b';
+  g.fillStyle = '#6e7176';
   for (const l of lines) {
     g.fillRect(0, toPx(l - CITY.roadW / 2), S, toPx(l + CITY.roadW / 2) - toPx(l - CITY.roadW / 2));
     g.fillRect(toPx(l - CITY.roadW / 2), 0, toPx(l + CITY.roadW / 2) - toPx(l - CITY.roadW / 2), S);
