@@ -38,6 +38,10 @@ G.busted = busted;
 // ---------- effects ----------
 const tracerPool = [];
 function makeTracer(G, from, to) {
+  if (![from.x, from.y, from.z, to.x, to.y, to.z].every(Number.isFinite)) {
+    console.warn('TRACER_NAN skipped');
+    return;
+  }
   const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
   const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.9 }));
   G.scene.add(line);
@@ -193,10 +197,23 @@ function updateCamera(dt) {
   const alignRate = G.inCar ? 2.2 : (p.speed > 0.5 ? 1.1 : 0);
   if (alignRate > 0) p.camYaw = lerpAngle(p.camYaw, focusHeading, clamp(dt * alignRate, 0, 1));
   const focus = G.inCar ? { x: G.playerCar.x, z: G.playerCar.z } : { x: p.x, z: p.z };
-  const dist = p.camDist;
-  const cx = focus.x - Math.sin(p.camYaw) * Math.cos(p.camPitch) * dist;
-  const cz = focus.z - Math.cos(p.camYaw) * Math.cos(p.camPitch) * dist;
-  const cy = 2.2 + Math.sin(p.camPitch) * dist;
+  // pull the camera in when a building would block the view
+  const dirX = -Math.sin(p.camYaw) * Math.cos(p.camPitch);
+  const dirZ = -Math.cos(p.camYaw) * Math.cos(p.camPitch);
+  const dirY = Math.sin(p.camPitch);
+  let dist = 1.5;
+  for (let d = 1.5; d <= p.camDist; d += 0.5) {
+    const cx = focus.x + dirX * d, cy = 2.2 + dirY * d, cz = focus.z + dirZ * d;
+    let blocked = false;
+    for (const c of G.colliders) {
+      if (cx > c.minX - 0.4 && cx < c.maxX + 0.4 && cz > c.minZ - 0.4 && cz < c.maxZ + 0.4 && cy < (c.h || 20)) { blocked = true; break; }
+    }
+    if (blocked) break;
+    dist = d;
+  }
+  const cx = focus.x + dirX * dist;
+  const cz = focus.z + dirZ * dist;
+  const cy = 2.2 + dirY * dist;
   let shakeX = 0, shakeY = 0;
   if (G.shake > 0) { G.shake -= dt; shakeX = (Math.random() - 0.5) * G.shake; shakeY = (Math.random() - 0.5) * G.shake; }
   G.camera.position.set(cx + shakeX, cy + shakeY, cz);

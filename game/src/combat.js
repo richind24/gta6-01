@@ -72,7 +72,7 @@ export function tryShoot(G) {
         }
       }
     }
-    G.tracer(G, origin, end);
+    G.tracer(origin, end);
   }
   scarePeds(G, p.x, p.z, 30);
   if (G.rng() < 0.6) G.addWanted(1, 'tembakan terdengar');
@@ -140,7 +140,7 @@ export function updateEnemies(G, dt) {
       if (e.shootTimer <= 0) {
         e.shootTimer = 1.4 + G.rng() * 1.2;
         G.audio.gunshot('pistol', 0.4);
-        G.tracer(G, new THREE.Vector3(e.x, 1.4, e.z), new THREE.Vector3(px, 1.2, pz));
+        G.tracer(new THREE.Vector3(e.x, 1.4, e.z), new THREE.Vector3(px, 1.2, pz));
         if (G.rng() < 0.45) damagePlayer(G, 7);
       }
     }
