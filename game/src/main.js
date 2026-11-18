@@ -1,371 +1,415 @@
-// SOLARA BAY — an original open-world crime sandbox.
-// Dax Rivers returns to his home city to take it back from the Kessler family,
-// one job at a time. All names, places and characters are original fiction.
-// Rebuild (Nov 2026): 10 story missions, police helicopter, 3 radio stations,
-// diner + auto shops, safehouse property, garage upgrades, rifle — same city,
-// much denser systems, bright noon cover.
+// SOLARA BAY — boot, game loop, save games and the central event bus. The
+// loop owns one context object (ctx) that every system reads each frame.
+(function () {
+  'use strict';
+  var SB = window.SB;
+  var cfg = SB.cfg;
+  var U = SB.util;
 
-import { CITY, SAVE_KEY, STORY_TOTAL, clamp, lerp, lerpAngle, money } from './config.js';
-import { buildCity, LANDMARKS, insideOwnedProperty } from './world.js';
-import { spawnTraffic, updateTraffic, drivePlayerCar, spawnCar } from './vehicles.js';
-import { makePersonModel, spawnPedestrians, updatePedestrians } from './people.js';
-import { createPlayer, initPlayerModel, updatePlayerOnFoot, nearestCar, enterCar, exitCar, damagePlayer } from './player.js';
-import { addWanted, updatePolice, clearPolice } from './police.js';
-import { tryShoot, updateEnemies, WEAPONS, WEAPON_ORDER } from './combat.js';
-import { createMissions, startStoryMission, startSideMission, updateMissions, buildMarker, updateMarker, tryStartNextStory, STORY } from './missions.js';
-import { createWeather, updateWeather } from './weather.js';
-import { createAudio } from './audio.js';
-import { createHud } from './hud.js';
-import { createInput } from './input.js';
-import { applyShot } from './shots.js';
-import { createHeli } from './heli.js';
-import { createRadio } from './radio.js';
-import * as economy from './economy.js';
+  SB.save = {
+    key: 'solara-bay-save-v1',
+    saveGame: function (ctx) {
+      try {
+        var p = ctx.player;
+        localStorage.setItem(this.key, JSON.stringify({
+          money: p.money, health: p.health, index: SB.missions.index,
+          photoDone: SB.missions.photoTour.done,
+          upgrades: p.upgrades, x: p.x, z: p.z, hour: SB.weather.hour
+        }));
+        return true;
+      } catch (e) { return false; }
+    },
+    loadGame: function () {
+      try {
+        var raw = localStorage.getItem(this.key);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) { return null; }
+    },
+    clear: function () { try { localStorage.removeItem(this.key); } catch (e) {} },
+    has: function () { return this.loadGame() !== null; }
+  };
 
-const params = new URLSearchParams(location.search);
-const SHOT = params.get('shot');
+  SB.main = {
+    state: 'title', // title | playing | paused | over
+    ctx: null,
+    _last: 0,
+    _shootCd: 0,
+    _prevHealth: 100,
+    _titleAngle: 0,
 
-const G = {
-  time: 0, rng: null, scene: null, camera: null, renderer: null,
-  cars: [], deadCars: [], peds: [], cops: [], policeCars: [], enemies: [],
-  player: null, playerCar: null, inCar: false,
-  wanted: 0, wantedTimer: 0, wantedHeat: 0, recentCrime: 0,
-  inSafehouse: false, paused: false, started: false, gameOver: false,
-  shootCooldown: 0, shake: 0, missionEnemies: [],
-  weather: null, audio: null, hud: null, input: null, missions: null, economy,
-  heli: null, radio: null,
-};
+    init: function () {
+      window.__errors = [];
+      window.addEventListener('error', function (e) { window.__errors.push(String(e.message)); });
+      window.addEventListener('unhandledrejection', function (e) { window.__errors.push('rejection: ' + String(e.reason)); });
 
-G.addWanted = (stars, reason) => { addWanted(G, stars, reason); G.recentCrime = 8; };
-G.saveGame = saveGame;
-G.wasted = wasted;
-G.busted = busted;
+      var renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.12;
+      document.getElementById('app').appendChild(renderer.domElement);
 
-// ---------- effects ----------
-const tracerPool = [];
-function makeTracer(G, from, to) {
-  if (![from.x, from.y, from.z, to.x, to.y, to.z].every(Number.isFinite)) {
-    console.warn('TRACER_NAN skipped');
-    return;
-  }
-  const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.9 }));
-  G.scene.add(line);
-  tracerPool.push({ line, life: 0.09 });
-}
-G.tracer = (a, b) => makeTracer(G, a, b);
-G.muzzleFlash = () => {
-  if (!G._flash) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: G.glowTex, color: 0xffe9a8, transparent: true, depthWrite: false }));
-    s.scale.set(2.2, 2.2, 1);
-    G.scene.add(s);
-    G._flash = s;
-  }
-  const p = G.player;
-  const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
-  G._flash.position.set(p.x + fx * 0.9, 1.35, p.z + fz * 0.9);
-  G._flash.material.opacity = 1;
-  G._flashLife = 0.06;
-};
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color(cfg.palette.sky);
+      var camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 1400);
+      camera.position.set(0, 90, 190);
 
-// ---------- save / load ----------
-function saveGame() {
-  try {
-    const data = {
-      money: G.player.money, health: G.player.health, storyIndex: G.missions.storyIndex,
-      properties: economy.PROPERTIES.map((p) => p.owned),
-      weaponsOwned: G.player.weaponsOwned, ammo: G.player.ammo,
-      upgrades: G.player.upgrades, radio: G.radio ? G.radio.station().id : 'bayview',
-      x: G.player.x, z: G.player.z, timeOfDay: G.weather.timeOfDay, day: G.weather.day,
-    };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-  } catch (e) { /* storage unavailable */ }
-}
+      var ctx = {
+        scene: scene, camera: camera, renderer: renderer,
+        time: 0, dt: 0, input: SB.input, player: SB.player,
+        wanted: 0, shooting: false, modalOpen: false,
+        cameraYaw: Math.PI, cameraPitch: -0.32, cameraDist: 10,
+        shotCam: null,
+        onEvent: function (name, data) { SB.main.onEvent(name, data); }
+      };
+      window.__SB_CTX = ctx;
+      this.ctx = ctx;
 
-function loadGame() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
-    const d = JSON.parse(raw);
-    G.player.money = d.money; G.player.health = d.health;
-    G.missions.storyIndex = d.storyIndex || 0;
-    economy.PROPERTIES.forEach((p, i) => { p.owned = !!d.properties[i]; });
-    G.player.weaponsOwned = d.weaponsOwned || ['fists', 'pistol'];
-    G.player.ammo = d.ammo || { pistol: 24, smg: 0, shotgun: 0, rifle: 0 };
-    G.player.upgrades = d.upgrades || { turbo: false, armor: false };
-    if (d.radio && G.radio) G.radio.setStation(d.radio);
-    G.player.x = d.x ?? -64; G.player.z = d.z ?? 88;
-    G.weather.timeOfDay = d.timeOfDay ?? 10; G.weather.day = d.day ?? 1;
-    return true;
-  } catch (e) { return false; }
-}
+      SB.world.build(scene);
+      SB.weather.init(scene);
+      SB.player.create(scene);
+      SB.combat.init(scene);
+      SB.missions.init(scene);
+      this._spawnParked(scene);
+      SB.vehicles.spawnTraffic(scene, 14);
+      SB.people.spawnCrowd(scene, 42);
+      SB.hud.init();
+      SB.input.init(renderer.domElement);
+      SB.shots.setup(ctx);
+      if (SB.input.shot) {
+        // screenshot mode: skip the title screen, play at once
+        this.state = 'playing';
+        SB.hud.showGame();
+        if (!SB.missions.active && SB.missions.index < cfg.missions.length) {
+          // shots that did not start a mission yet get the first one
+          if (SB.input.shot === 'city' || SB.input.shot === 'harbor') SB.missions.startNext(ctx);
+        }
+      } else {
+        SB.hud.showTitle(SB.save.has());
+      }
+      SB.hud.cb = {
+        start: function () { SB.main.startRun(false); },
+        continueGame: function () { SB.main.startRun(true); },
+        resume: function () { SB.main.setPaused(false); },
+        save: function () { SB.save.saveGame(ctx); SB.hud.toast('Game saved.'); },
+        restart: function () { SB.save.clear(); window.location.reload(); },
+        quitToTitle: function () { SB.main.state = 'title'; SB.hud.showTitle(SB.save.has()); },
+        respawn: function () { SB.main.respawn(); },
+        closeShop: function () { SB.hud.closeModals(); ctx.modalOpen = false; SB.main.setPaused(false); }
+      };
+      window.addEventListener('resize', function () {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+      this._last = performance.now();
+      var self = this;
+      renderer.setAnimationLoop(function (t) { self.loop(t); });
+    },
 
-function wasted() {
-  if (G.gameOver) return;
-  G.gameOver = true;
-  clearPolice(G);
-  G.hud.showMenu('WASTED', 'Dax tumbang di jalanan Solara Bay.<br>Uangmu berkurang $100 untuk biaya rumah sakit.', [
-    { label: 'Bangun di Bayview General', fn: () => {
-      G.player.health = 100;
-      G.player.money = Math.max(0, G.player.money - 100);
-      G.player.x = LANDMARKS.hospital.x; G.player.z = LANDMARKS.hospital.z + 24;
-      G.player.model.position.set(G.player.x, 0, G.player.z);
-      G.player.dead = false; G.gameOver = false;
-      if (G.inCar) exitCar(G);
-      G.hud.hideMenu();
-    } },
-  ]);
-}
+    _spawnParked: function (scene) {
+      var rnd = U.rng(4242);
+      var types = ['sedan', 'taxi', 'pickup', 'sports', 'van'];
+      var spots = [
+        [180, -40, 0], [180, 90, 0], [-60, -140, Math.PI / 2], [60, 140, -Math.PI / 2],
+        [0, -120, Math.PI / 2], [-120, 40, 0], [120, -20, Math.PI], [-180, -90, 0]
+      ];
+      for (var i = 0; i < spots.length; i++) {
+        var s = spots[i];
+        var car = SB.vehicles.createCar(types[i % types.length], cfg.palette.car[Math.floor(rnd() * cfg.palette.car.length)]);
+        SB.vehicles.add(scene, car, s[0], s[1], s[2]);
+      }
+    },
 
-function busted() {
-  if (G.gameOver) return;
-  G.gameOver = true;
-  clearPolice(G);
-  G.hud.showMenu('BUSTED', 'Polisi Solara menangkapmu.<br>Denda $200 — dan mereka menyita senjatamu (kecuali tinju).', [
-    { label: 'Keluar dari kantor polisi', fn: () => {
-      G.player.money = Math.max(0, G.player.money - 200);
-      G.player.weaponsOwned = ['fists'];
-      G.player.weapon = 'fists';
-      G.player.x = LANDMARKS.police.x; G.player.z = LANDMARKS.police.z + 24;
-      G.player.model.position.set(G.player.x, 0, G.player.z);
-      G.player.dead = false; G.gameOver = false;
-      if (G.inCar) exitCar(G);
-      G.hud.hideMenu();
-    } },
-  ]);
-}
+    startRun: function (useSave) {
+      var ctx = this.ctx;
+      SB.audio.init();
+      if (useSave) {
+        var s = SB.save.loadGame();
+        if (s) {
+          var p = ctx.player;
+          p.money = s.money; p.health = s.health;
+          p.upgrades = s.upgrades || p.upgrades;
+          p.x = s.x; p.z = s.z;
+          SB.missions.index = s.index || 0;
+          SB.missions.photoTour.done = s.photoDone || {};
+          SB.missions.photoTour.count = Object.keys(SB.missions.photoTour.done).length;
+          if (s.hour) SB.weather.setTime(s.hour, ctx.scene);
+          p.group.position.set(p.x, 0, p.z);
+        }
+      } else {
+        SB.missions.reset();
+        SB.police.reset();
+      }
+      this.state = 'playing';
+      SB.hud.showGame();
+      if (!SB.missions.active && SB.missions.index < cfg.missions.length) SB.missions.startNext(ctx);
+      SB.hud.toast('Welcome to Solara Bay. Follow the yellow beacon.');
+    },
 
-// ---------- init ----------
-function init() {
-  G.rng = (() => { let s = 20261118; return () => { s |= 0; s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
-  const canvas = document.getElementById('game');
-  G.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  G.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  G.renderer.setSize(innerWidth, innerHeight);
-  G.renderer.shadowMap.enabled = true;
-  G.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  G.scene = new THREE.Scene();
-  G.scene.background = new THREE.Color(0x4aa8e8);
-  G.camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 1200);
-  G.camera.position.set(-40, 26, 150);
-  G.camera.lookAt(0, 10, 0);
+    setPaused: function (on) {
+      if (this.state !== 'playing' && this.state !== 'paused') return;
+      if (on) { this.state = 'paused'; SB.hud.showPause(true); }
+      else {
+        if (this.ctx.modalOpen) return;
+        this.state = 'playing'; SB.hud.showPause(false);
+      }
+    },
 
-  G.weather = createWeather(G);
-  G.audio = createAudio();
-  G.player = createPlayer(G);
-  G.missions = createMissions(G);
-  G.hud = createHud(G);
-  G.input = createInput(G);
-  G.heli = createHeli(G);
-  G.radio = createRadio(G);
+    respawn: function () {
+      var ctx = this.ctx;
+      var p = ctx.player;
+      SB.police.reset();
+      SB.combat.clearGuards(ctx.scene);
+      p.reset();
+      p.money = Math.max(0, p.money - 100);
+      p.x = cfg.places.safehouse.x; p.z = cfg.places.safehouse.z;
+      p.group.position.set(p.x, 0, p.z);
+      SB.missions.restartCurrent(ctx);
+      SB.hud.hideOver();
+      SB.hud.showGame();
+      this.state = 'playing';
+      SB.hud.toast('You wake up at the safehouse. $100 hospital fee. The city is still yours to take.');
+    },
 
-  buildCity(G);
-  initPlayerModel(G, makePersonModel);
-  spawnTraffic(G);
-  spawnPedestrians(G, 56);
-  buildMarker(G);
-  updateMarker(G);
+    onEvent: function (name, data) {
+      var ctx = this.ctx;
+      var p = ctx.player;
+      data = data || {};
+      if (name === 'crime') {
+        SB.police.addWanted(data.amount || 1, ctx);
+        if (data.kind === 'steal') SB.hud.toast('Car stolen — the law noticed.');
+      } else if (name === 'wanted') {
+        ctx.wanted = data.wanted;
+        if (data.wanted > 0) { SB.audio.wantedUp(); SB.hud.toast('Wanted level ' + data.wanted + ' — lose the heat!'); }
+      } else if (name === 'shotFired') {
+        SB.audio.shot(data.weapon === 'rifle');
+        ctx.shooting = true;
+      } else if (name === 'dryFire') {
+        SB.audio.dryClick(); SB.hud.toast('Out of ammo — buy more at Ammu-Nation.');
+      } else if (name === 'guardDown') {
+        SB.audio.pickup();
+        SB.missions.onGuardDown(ctx);
+      } else if (name === 'guardHit') {
+        SB.audio.click();
+      } else if (name === 'copDown') {
+        SB.hud.toast('Cop down. That will not help your wanted level.');
+      } else if (name === 'pedDown') {
+        SB.hud.toast('A bystander is down. The city saw that.');
+      } else if (name === 'missionStart') {
+        SB.hud.subtitle(data.mission.line, 6);
+        SB.hud.toast('Mission ' + data.mission.id + ': ' + data.mission.title);
+      } else if (name === 'missionDone') {
+        SB.audio.missionDone();
+        SB.hud.toast('Mission complete! +' + U.fmtMoney(data.mission.reward));
+        SB.hud.subtitle('Mission complete — ' + data.mission.title + '  •  +' + U.fmtMoney(data.mission.reward), 5);
+      } else if (name === 'missionFail') {
+        SB.hud.toast(data.reason + ' — mission restarts.');
+      } else if (name === 'storyDone') {
+        SB.audio.missionDone();
+        SB.hud.subtitle('Solara Bay is yours, Dax. Kessler is finished — free roam the city you took back.', 8);
+        SB.hud.toast('STORY COMPLETE — Solara Bay is yours!');
+      } else if (name === 'pickedUp') {
+        SB.audio.pickup(); SB.hud.toast('Package secured. Deliver it!');
+      } else if (name === 'photoTour') {
+        SB.audio.pickup();
+        SB.hud.toast('Photo Tour: ' + data.spot.name + ' (' + data.count + '/6)  +$150');
+      } else if (name === 'photoMission') {
+        SB.audio.pickup();
+        SB.hud.toast('Photo taken: ' + data.spot.name + ' (' + data.count + '/3)');
+      } else if (name === 'photoMiss') {
+        SB.hud.toast('No landmark in frame — stand in a yellow photo zone and press Q.');
+      } else if (name === 'bought') {
+        SB.hud.toast('Bought ' + data.item.name + '.');
+      } else if (name === 'rested') {
+        SB.audio.heal();
+        SB.hud.toast('Rested at the safehouse. Health restored, game saved.');
+      } else if (name === 'heli') {
+        if (data.active) SB.hud.toast('Air support is overhead — lose the heli!');
+      } else if (name === 'radio') {
+        SB.hud.toast(data.station ? ('Radio: ' + data.station.name) : 'Radio off.');
+      } else if (name === 'track') {
+        SB.hud.toast('♪ Now playing: ' + data.name);
+      } else if (name === 'talk') {
+        SB.hud.subtitle(data.line, 6);
+      } else if (name === 'ramHit') {
+        SB.audio.crash();
+        SB.hud.toast("Kessler's car is taking damage — " + Math.max(0, Math.round(data.health)) + '% left!');
+      } else if (name === 'copShot' || name === 'guardShot') {
+        SB.audio.shot(false);
+        SB.hud.damageFlash();
+      } else if (name === 'enteredCar') {
+        SB.audio.click();
+      } else if (name === 'exitedCar') {
+        SB.audio.click();
+      } else if (name === 'carDestroyed') {
+        SB.audio.crash();
+        if (p.inCar === data.car) {
+          p.inCar = null; data.car.driver = null;
+          p.x = data.car.x + 3; p.z = data.car.z + 3;
+          p.group.visible = true;
+        }
+        SB.vehicles.remove(ctx.scene, data.car);
+        SB.hud.toast('Your car was destroyed!');
+        SB.police.addWanted(1, ctx);
+      } else if (name === 'died') {
+        this.state = 'over';
+        SB.hud.showOver('WASTED', 'The Bay got the better of Dax this time. Hospital fee $100 — the safehouse is waiting.');
+      } else if (name === 'interact') {
+        var zone = SB.economy.zoneAt(data.x, data.z);
+        if (!zone) { SB.hud.toast('Nothing here. Follow the yellow beacon.'); return; }
+        if (zone.kind === 'shop') {
+          ctx.modalOpen = true; this.setPaused(true);
+          SB.hud.openShop(zone.shop, p.money);
+        } else if (zone.kind === 'garage') {
+          ctx.modalOpen = true; this.setPaused(true);
+          SB.hud.openGarage(p.money);
+        } else if (zone.kind === 'safehouse') {
+          SB.economy.rest(ctx);
+        } else if (zone.kind === 'marina') {
+          SB.hud.toast('The marina. Boats, deals, and Kessler men — best visited on a mission.');
+        }
+      }
+    },
 
-  G.hud.setObjective('Pergi ke The Rusty Anchor untuk memulai cerita.');
-  window.addEventListener('resize', () => {
-    G.camera.aspect = innerWidth / innerHeight;
-    G.camera.updateProjectionMatrix();
-    G.renderer.setSize(innerWidth, innerHeight);
-  });
+    loop: function (t) {
+      // endFrame must run even if a system throws mid-frame, or a stale
+      // pressed key re-fires next frame (that once re-entered a car the
+      // player had just exited). The tick does the work; this wrapper owns
+      // the input bookkeeping.
+      try { this._tick(t); }
+      catch (e) {
+        window.__errors.push(String(e && e.message || e));
+      } finally {
+        this.ctx.input.endFrame();
+      }
+    },
 
-  // start flow
-  const hasSave = !!localStorage.getItem(SAVE_KEY);
-  if (SHOT) {
-    startGame(false);
-    applyShot(G, SHOT);
-    updateMarker(G);
-  } else {
-    G.hud.showMenu('SOLARA BAY', 'Kota ini milik keluarga Kessler. Dax Rivers pulang untuk mengambilnya kembali.<br><br><b>Kontrol:</b> WASD bergerak / mengemudi &nbsp;•&nbsp; Mouse: putar kamera, klik: tembak &nbsp;•&nbsp; <b>E</b>: masuk/keluar mobil, mulai misi, buka toko &nbsp;•&nbsp; <b>1-5</b>: ganti senjata &nbsp;•&nbsp; <b>R</b>: ganti stasiun radio &nbsp;•&nbsp; <b>Shift</b>: lari &nbsp;•&nbsp; <b>Esc</b>: jeda', [
-      { label: hasSave ? 'Lanjutkan' : 'Mulai Cerita Baru', fn: () => { if (hasSave) loadGame(); startGame(true); } },
-      ...(hasSave ? [{ label: 'Cerita Baru (hapus save)', fn: () => { localStorage.removeItem(SAVE_KEY); startGame(true); } }] : []),
-    ]);
-  }
-  requestAnimationFrame(loop);
-}
+    _tick: function (t) {
+      var ctx = this.ctx;
+      var dt = Math.min(0.05, Math.max(0.001, (t - this._last) / 1000));
+      this._last = t;
+      var input = ctx.input;
 
-function startGame(withIntro) {
-  G.started = true;
-  G.paused = false;
-  G.hud.hideMenu();
-  G.audio.ensure();
-  if (withIntro) G.hud.showMissionCard('SOLARA BAY', 'Dax Rivers pulang. Temui Mara Voss di The Rusty Anchor. Tekan R untuk ganti radio.');
-}
+      if (this.state === 'title') {
+        // slow aerial orbit behind the title screen
+        this._titleAngle += dt * 0.04;
+        var cx = Math.sin(this._titleAngle) * 190, cz = Math.cos(this._titleAngle) * 190;
+        ctx.camera.position.set(cx, 95, cz);
+        ctx.camera.lookAt(40, 0, -20);
+        SB.weather.update(dt, ctx);
+        SB.vehicles.update(dt, ctx);
+        SB.people.update(dt, ctx);
+        ctx.renderer.render(ctx.scene, ctx.camera);
+        input.endFrame();
+        return;
+      }
 
-// ---------- camera ----------
-function updateCamera(dt) {
-  const p = G.player;
-  // mouse orbit
-  p.camYaw -= G.input.mouseDX * 0.0032;
-  p.camPitch = clamp(p.camPitch + G.input.mouseDY * 0.0022, 0.05, 0.9);
-  G.input.mouseDX = 0; G.input.mouseDY = 0;
-  // auto-align behind movement / car heading
-  const focusHeading = G.inCar ? G.playerCar.heading : (p.speed > 0.5 ? p.heading : p.camYaw);
-  const alignRate = G.inCar ? 2.2 : (p.speed > 0.5 ? 1.1 : 0);
-  if (alignRate > 0) p.camYaw = lerpAngle(p.camYaw, focusHeading, clamp(dt * alignRate, 0, 1));
-  const focus = G.inCar ? { x: G.playerCar.x, z: G.playerCar.z } : { x: p.x, z: p.z };
-  // pull the camera in when a building would block the view
-  const dirX = -Math.sin(p.camYaw) * Math.cos(p.camPitch);
-  const dirZ = -Math.cos(p.camYaw) * Math.cos(p.camPitch);
-  const dirY = Math.sin(p.camPitch);
-  let dist = 1.5;
-  for (let d = 1.5; d <= p.camDist; d += 0.5) {
-    const cx = focus.x + dirX * d, cy = 2.2 + dirY * d, cz = focus.z + dirZ * d;
-    let blocked = false;
-    for (const c of G.colliders) {
-      if (cx > c.minX - 0.4 && cx < c.maxX + 0.4 && cz > c.minZ - 0.4 && cz < c.maxZ + 0.4 && cy < (c.h || 20)) { blocked = true; break; }
+      // pause toggle (Esc or P)
+      if (input.pressed.has('Escape') || input.pressed.has('KeyP')) {
+        if (this.state === 'playing') this.setPaused(true);
+        else if (this.state === 'paused' && !ctx.modalOpen) this.setPaused(false);
+      }
+      if (this.state === 'paused' || this.state === 'over') {
+        ctx.renderer.render(ctx.scene, ctx.camera);
+        input.endFrame();
+        return;
+      }
+
+      // ---- playing ----
+      ctx.dt = dt;
+      ctx.time += dt;
+      ctx.shooting = false;
+      ctx.wanted = SB.police.wanted;
+
+      // camera orbit from mouse drag
+      ctx.cameraYaw -= input.mouseDX * 0.0042;
+      ctx.cameraPitch = U.clamp(ctx.cameraPitch + input.mouseDY * 0.0022, -0.62, -0.08);
+      ctx.cameraDist = U.clamp(ctx.cameraDist + input.wheel * 0.01, 6.5, 17);
+
+      var p = ctx.player;
+      if (input.pressed.has('KeyQ')) SB.missions.tryPhoto(ctx);
+      if (input.pressed.has(cfg.keys.radio)) SB.radio.next(ctx);
+      if (input.pressed.has('Digit1')) SB.radio.setStation(0, ctx);
+      if (input.pressed.has('Digit2')) SB.radio.setStation(1, ctx);
+      if (input.pressed.has('Digit3')) SB.radio.setStation(2, ctx);
+
+      SB.weather.update(dt, ctx);
+      SB.radio.update(dt, ctx);
+      SB.vehicles.update(dt, ctx);
+      SB.people.update(dt, ctx);
+      if (p.inCar) {
+        SB.vehicles.drive(p.inCar, input, dt, SB.world);
+        p.update(dt, ctx);
+        // camera follows the car's heading — but p.update may have exited
+        // the car (E), so re-check before touching the car.
+        if (p.inCar) {
+          var diff = p.inCar.angle - ctx.cameraYaw;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          ctx.cameraYaw += diff * Math.min(1, dt * 1.4);
+        }
+      } else {
+        p.update(dt, ctx);
+        this._shootCd -= dt;
+        if (input.shootHeld && this._shootCd <= 0) {
+          this._shootCd = p.weapon === 'rifle' ? 0.15 : 0.3;
+          SB.combat.tryShoot(ctx);
+        }
+      }
+      SB.police.update(dt, ctx);
+      SB.heli.update(dt, ctx);
+      SB.combat.update(dt, ctx);
+      SB.missions.update(dt, ctx);
+      SB.audio.update(dt, ctx);
+      SB.shots.update(dt, ctx);
+
+      // damage flash on health loss
+      if (p.health < this._prevHealth) SB.hud.damageFlash();
+      this._prevHealth = p.health;
+
+      // contextual hint
+      var hint = '';
+      if (!p.inCar && !p.dead) {
+        var nearCar = SB.vehicles.nearestCar(p.x, p.z, 4.5);
+        var zone = SB.economy.zoneAt(p.x, p.z);
+        var spot = null;
+        for (var i = 0; i < cfg.photoSpots.length; i++) {
+          var s = cfg.photoSpots[i];
+          if (!SB.missions.photoTour.done[s.id] && U.dist2(p.x, p.z, s.x, s.z) < s.r * s.r) { spot = s; break; }
+        }
+        if (zone && zone.kind === 'shop') hint = 'Press E — ' + zone.shop.name;
+        else if (zone && zone.kind === 'garage') hint = 'Press E — Sunset Garage (upgrades)';
+        else if (zone && zone.kind === 'safehouse') hint = 'Press E — Rest & save';
+        else if (spot) hint = 'Press Q — photograph ' + spot.name;
+        else if (nearCar) hint = 'Press E — take the ' + nearCar.type;
+      }
+      SB.hud.setHint(hint);
+
+      // ---- camera ----
+      var target = p.inCar ? p.inCar : p;
+      if (ctx.shotCam) {
+        ctx.camera.position.set(ctx.shotCam.pos.x, ctx.shotCam.pos.y, ctx.shotCam.pos.z);
+        ctx.camera.lookAt(ctx.shotCam.look.x, ctx.shotCam.look.y, ctx.shotCam.look.z);
+      } else {
+        var fx = Math.sin(ctx.cameraYaw), fz = Math.cos(ctx.cameraYaw);
+        var dist = p.inCar ? ctx.cameraDist + 2.5 : ctx.cameraDist;
+        var height = 3.2 + dist * 0.32;
+        var cx2 = target.x - fx * dist, cz2 = target.z - fz * dist;
+        var cy2 = height;
+        var k = 1 - Math.exp(-dt * 7);
+        ctx.camera.position.x += (cx2 - ctx.camera.position.x) * k;
+        ctx.camera.position.y += (cy2 - ctx.camera.position.y) * k;
+        ctx.camera.position.z += (cz2 - ctx.camera.position.z) * k;
+        ctx.camera.lookAt(target.x + fx * 4, 1.6, target.z + fz * 4);
+      }
+
+      SB.hud.update(ctx);
+      ctx.renderer.render(ctx.scene, ctx.camera);
+      input.endFrame();
     }
-    if (blocked) break;
-    dist = d;
-  }
-  const cx = focus.x + dirX * dist;
-  const cz = focus.z + dirZ * dist;
-  const cy = 2.2 + dirY * dist;
-  let shakeX = 0, shakeY = 0;
-  if (G.shake > 0) { G.shake -= dt; shakeX = (Math.random() - 0.5) * G.shake; shakeY = (Math.random() - 0.5) * G.shake; }
-  G.camera.position.set(cx + shakeX, cy + shakeY, cz);
-  G.camera.lookAt(focus.x, 1.6, focus.z);
-}
-
-// ---------- interactions ----------
-function handleKeys() {
-  const inp = G.input, p = G.player;
-  if (inp.pressed.KeyE) {
-    inp.pressed.KeyE = false;
-    if (!G.started || G.paused || G.gameOver) return;
-    if (G.inCar) { exitCar(G); return; }
-    if (tryStartNextStory(G)) return;
-    if (economy.tryBuyProperty(G)) return;
-    const shop = economy.nearShop(G);
-    if (shop) { G.hud.showShop(shop); return; }
-    const car = nearestCar(G, 4.5);
-    if (car) { enterCar(G, car); return; }
-  }
-  if (inp.pressed.Escape) {
-    inp.pressed.Escape = false;
-    if (!G.started || G.gameOver) return;
-    if (G.hud.shop.style.display === 'block') { G.hud.shop.style.display = 'none'; G.paused = false; return; }
-    G.paused = !G.paused;
-    if (G.paused) {
-      G.hud.showMenu('JEDA', `Uang: ${money(p.money)} &nbsp;•&nbsp; Misi cerita: ${Math.min(G.missions.storyIndex, STORY_TOTAL)}/${STORY_TOTAL} selesai<br>Properti: ${economy.PROPERTIES.filter((x) => x.owned).map((x) => x.name).join(', ') || 'belum ada'}<br>Radio: ${G.radio.label()}`, [
-        { label: 'Lanjutkan', fn: () => { G.paused = false; G.hud.hideMenu(); } },
-        { label: 'Simpan Game', fn: () => { saveGame(); G.hud.flash('Game tersimpan.'); G.paused = false; G.hud.hideMenu(); } },
-        { label: 'Misi Sampingan: Taxi ($150)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'taxi'); } },
-        { label: 'Misi Sampingan: Balapan ($500)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'race'); } },
-        { label: 'Misi Sampingan: Kurir ($200)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'delivery'); } },
-        { label: 'Misi Sampingan: Rampok Toko ($400)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'robbery'); } },
-        { label: 'Misi Sampingan: Tur Foto ($250)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'photo'); } },
-      ]);
-    } else G.hud.hideMenu();
-  }
-  if (inp.pressed.KeyM) {
-    inp.pressed.KeyM = false;
-    G.audio.musicOn = !G.audio.musicOn;
-    G.hud.flash(G.audio.musicOn ? 'Musik: nyala' : 'Musik: mati');
-  }
-  if (inp.pressed.KeyR) {
-    inp.pressed.KeyR = false;
-    if (G.started && !G.paused && !G.gameOver) G.radio.next();
-  }
-  for (let idx = 0; idx < WEAPON_ORDER.length; idx++) {
-    const code = 'Digit' + (idx + 1);
-    if (inp.pressed[code]) {
-      inp.pressed[code] = false;
-      const w = WEAPON_ORDER[idx];
-      if (p.weaponsOwned.includes(w)) {
-        p.weapon = w;
-        p.model.userData.gun.visible = w !== 'fists';
-        G.hud.flash(WEAPONS[w].name);
-        G.audio.click();
-      } else G.hud.flash(`${WEAPONS[w].name} belum dimiliki — beli di Ironworks Arms.`);
-    }
-  }
-  // clear stale edge presses
-  for (const k of Object.keys(inp.pressed)) inp.pressed[k] = false;
-}
-
-function updatePrompt() {
-  if (!G.started || G.paused || G.gameOver) { G.hud.setPrompt(''); return; }
-  if (G.inCar) { G.hud.setPrompt('E — keluar dari mobil'); return; }
-  if (tryStartNextStoryPeek()) { G.hud.setPrompt('E — mulai misi: ' + STORY[G.missions.storyIndex].name); return; }
-  const shop = economy.nearShop(G);
-  if (shop) { G.hud.setPrompt(`E — buka ${shop.name}`); return; }
-  for (const pr of economy.PROPERTIES) {
-    if (Math.hypot(G.player.x - pr.at.x, G.player.z - pr.at.z) < 12) {
-      G.hud.setPrompt(pr.owned ? `E — ${pr.name} (milikmu)` : `E — beli ${pr.name} (${money(pr.price)})`);
-      return;
-    }
-  }
-  const car = nearestCar(G, 4.5);
-  if (car) { G.hud.setPrompt(car.driver ? `E — curi ${car.type.name}` : `E — naik ${car.type.name}`); return; }
-  G.hud.setPrompt('');
-}
-
-function tryStartNextStoryPeek() {
-  return !G.missions.active && G.missions.storyIndex < STORY.length &&
-    Math.hypot(G.player.x - LANDMARKS.bar.x, G.player.z - LANDMARKS.bar.z) < 10;
-}
-
-// ---------- main loop ----------
-let last = performance.now();
-function loop(now) {
-  requestAnimationFrame(loop);
-  const dt = clamp((now - last) / 1000, 0, 0.05);
-  last = now;
-  G.time += dt;
-  handleKeys();
-  if (!G.started || G.paused || G.gameOver) {
-    // still render the scene behind menus
-    updateCamera(dt);
-    G.renderer.render(G.scene, G.camera);
-    return;
-  }
-  if (G.shootCooldown > 0) G.shootCooldown -= dt;
-  if (G._flashLife > 0) {
-    G._flashLife -= dt;
-    if (G._flashLife <= 0 && G._flash) G._flash.material.opacity = 0;
-  }
-  for (let i = tracerPool.length - 1; i >= 0; i--) {
-    tracerPool[i].life -= dt;
-    if (tracerPool[i].life <= 0) {
-      G.scene.remove(tracerPool[i].line);
-      tracerPool.splice(i, 1);
-    } else tracerPool[i].line.material.opacity = tracerPool[i].life / 0.09;
-  }
-
-  updateWeather(G, dt);
-  if (G.inCar && G.playerCar) drivePlayerCar(G, dt);
-  else updatePlayerOnFoot(G, dt);
-  updateTraffic(G, dt);
-  updatePedestrians(G, dt);
-  updatePolice(G, dt);
-  updateEnemies(G, dt);
-  updateMissions(G, dt);
-  // shooting (hold for auto weapons, edge for semi-auto)
-  const w = WEAPONS[G.player.weapon];
-  const shootPressed = G.input.shooting && !G._prevShooting;
-  G._prevShooting = G.input.shooting;
-  if ((w.auto && G.input.shooting) || shootPressed) tryShoot(G);
-  // marker diamond spin
-  if (G.missions.marker && G.missions.marker.visible) {
-    G.missions.marker.userData.diamond.rotation.y += dt * 2;
-    G.missions.marker.userData.diamond.position.y = 12 + Math.sin(G.time * 2) * 0.8;
-  }
-  // siren audio follows wanted level
-  G.audio.setSiren(G.wanted > 0, G.policeCars.length ? Math.hypot(G.policeCars[0].x - G.player.x, G.policeCars[0].z - G.player.z) : 200);
-  // safehouse: inside owned property radius hides the player from police
-  G.inSafehouse = insideOwnedProperty(G, G.player.x, G.player.z, 14);
-  updateCamera(dt);
-  updatePrompt();
-  G.hud.update(dt);
-  G.renderer.render(G.scene, G.camera);
-}
-
-// expose a tiny debug handle for play-testing
-window.__solara = G;
-
-init();
+  };
+})();

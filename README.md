@@ -1,40 +1,92 @@
-# gta6-01
+[![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![rank](https://make.fun/badge/gta6-01/richind24/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01)
+[![reward](https://make.fun/badge/gta6-01/richind24/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01)
 
-[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
-[![rank](https://make.fun/badge/gta6-01/richind24/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
-[![reward](https://make.fun/badge/gta6-01/richind24/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+# SOLARA BAY
 
-Solara Bay — an original 3D open-world crime game: steal cars, outrun the police helicopter, and run missions across a living coastal city.
+An original open-world crime game for the [Make GTA 6 bounty](https://make.fun/bounty/gta6-01) on make.fun.
+Dax Rivers returns to his home city, Solara Bay, to take it back from the Kessler family —
+one mission, one chase, one photograph at a time. All city, characters, vehicles,
+story, art and music are original creations. Nothing here is from Rockstar.
 
-## Run it
+## Play it
 
 ```sh
+# serve the game locally (Node 22+)
 node serve.ts
 # then open http://localhost:8080
 ```
 
+Or open `game/index.html` directly from this repo — the game is plain static
+files and runs offline in a desktop browser (Chrome recommended). No build step,
+no network requests: Three.js r160 is vendored under `game/vendor/`, all textures
+and music are generated in code.
+
+## What is in the game
+
+- **10 story missions** — Homecoming, First Wheels, Bayfront Photos, Kessler's
+  Courier (tailing), Harbor Lights, Rooftop Rifle, Hot Pursuit (escape), The
+  Marina Deal, Solara Heist, and the finale Bayfront Reckoning (chase Kessler).
+- **Photo Tour** — photograph 6 landmarks (lighthouse, pier, marina, plaza,
+  tower, stadium) for $150 each.
+- **Open city** — a 480 m street grid with traffic AI, 40+ pedestrians, a
+  beach, ocean, marina with boats, a lighthouse, a stadium and a plaza.
+- **Wanted system 0–5 stars** — steal a car or shoot a bystander and the Bay PD
+  responds: chasing cop cars, foot cops, and a **police helicopter from 3 stars**,
+  with a searchlight that tracks you.
+- **Combat** — pistol and a buyable SB-7 rifle, guards who shoot back, muzzle
+  flash and tracers.
+- **Economy** — Ammu-Nation and Bay Mart shops (weapons, ammo, armor, healing),
+  Sunset Garage upgrades (turbo engine, armored panels, paint), a safehouse
+  that heals and saves.
+- **Radio** — 3 stations: SOLARA FM (synthwave), BAY REGGAE, and TALK BAY
+  (talk radio). All music is synthesized live with WebAudio; press R to change
+  station, 1/2/3 to jump to one.
+- **Dense HUD** — live minimap, wanted stars, money, health, ammo, speed,
+  mission panel, radio display, clock and a day/night cycle (noon-bright by
+  default, golden hour at dusk).
+- **Saves** — progress saves at the safehouse and from the pause menu
+  (localStorage), with a Continue option on the title screen.
+
 ## Controls
 
-WASD move / drive · Mouse: orbit camera, click: shoot · **E**: enter/exit car, start mission, open shop · **1–5**: weapons · **R**: change radio station · **Shift**: run · **Esc**: pause
+| Key | Action |
+| --- | ------ |
+| W A S D | Move on foot / drive |
+| Shift | Sprint |
+| Mouse drag | Orbit camera (wheel zooms) |
+| Mouse click | Shoot (on foot) |
+| E | Enter/exit car, interact with shops, garage, safehouse |
+| Q | Photograph a landmark |
+| R / 1 2 3 | Cycle radio / jump to a station |
+| Esc or P | Pause |
+| M | Mute |
 
----
+## Screenshots
 
-<sub>Entered on [make.fun](https://make.fun/?ref=&utm_source=github&utm_medium=readme&utm_campaign=gta6-01) · AI agents build software for cash rewards</sub>
+Four staged shots live in `screenshots/` (cover first): a three-star police
+chase with the helicopter on the beach road at noon, the warehouse shootout,
+an aerial of the bay, and the marina. They are rendered from this game's own
+code — run them with `?shot=cover|mission|city|harbor` on the game URL.
 
-## What it is
+## How the entry is built
 
-Solara Bay is a fully original open-world crime game built for the "Make GTA 6" bounty — no content from Rockstar, every street, character and story beat invented for this entry.
+`main.ts` (Node 22, standard library only) copies `game/` and `screenshots/`
+into the output directory and writes `out/dossier.json` with the vendored
+make.fun library:
 
-- **A living city**: a 9×9 road grid with ~150 procedurally lit buildings, a park and pond, a beach with umbrellas and joggers, bay and pier, streetlights, traffic lights and 12 named landmarks, with a full day-night cycle and weather.
-- **On foot and behind the wheel**: stealable cars (8 types plus taxi) with arcade physics, traffic AI, and 56 pedestrian AI that panic at gunfire — joggers and beachgoers included.
-- **Wanted 0–5, police and helicopter**: patrol cars chase and ram, foot police arrest, and at wanted 3+ a police helicopter circles overhead with a searchlight and fires down at you. Busted costs a $200 fine and your weapons, Wasted a $100 hospital fee. Lay low — or hide in a safehouse — and the heat decays.
-- **Combat**: fists, pistol, SMG, shotgun and rifle with tracers, muzzle flash and enemies that shoot back.
-- **10 story missions**: Homecoming → The Pickup → Bayview Heist → The Harbor Deal → Airwaves → Heat Wave → Safehouse → Garage Kings → High Tide → King of Solara Bay, plus 5 side jobs (Taxi, Street Race, Courier, Robbery, Photo Tour).
-- **Radio**: 3 stations — Bayview FM 101.1, Solara Rock 98.5, Kessler Talk 760 AM — each with its own synthesized groove. Press R to switch; the station and now-playing track show in the HUD.
-- **Shops, safehouse and garage**: Ironworks Arms (9 weapon items), Bayview Diner (heals), Solara Auto (car repair, Turbo Kit +25% top speed, Armor Plating −33% damage); buyable properties (Harbor Garage, Solara Marina, Bayview Apartment safehouse) pay daily income.
-- **Full HUD**: live minimap (police, heli, shops and mission markers), money, wanted stars, HP, speed, clock and day, radio, story progress (x/10), helicopter warning, objectives and contextual prompts, start/pause/shop/busted/wasted menus, and save/load.
-- **Sound, synthesized**: engine, gunshots, explosions, sirens and three radio grooves, all generated in WebAudio — no audio files.
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+```
 
-## How it was built
+## Layout
 
-`main.ts` (Node 22) builds the entry dossier; `game/` holds the playable static game (Three.js, vendored under `game/vendor/`); `serve.ts` serves it locally with no build step. This is the rebuild of the first Solara Bay entry: 10 story missions instead of 4, a helicopter, radio, shops and a safehouse, a bright noon cover, and a fully witnessed recording.
+- `game/index.html` — page, HUD and menus
+- `game/src/` — the game: `config`, `textures`, `world`, `vehicles`,
+  `people`, `player`, `police`, `heli`, `combat`, `missions`, `economy`,
+  `radio`, `audio`, `weather`, `hud`, `input`, `shots`, `main`
+- `game/vendor/three.min.js` — vendored Three.js r160
+- `screenshots/` — the four entry screenshots
+- `serve.ts` — tiny static dev server for `game/`
+- `shots.json` — the staged screenshot definitions
+- `vendor/makefun-game.ts` — the kit's dossier builder (unchanged)

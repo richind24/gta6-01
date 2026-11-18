@@ -1,94 +1,90 @@
-// Economy: cash, buyable properties with daily income, and the shops.
-// Rebuild (Nov 2026): a third property (Bayview Apartment safehouse), the
-// Rifle in the gun shop, and two new shops — Bayview Diner (heals) and
-// Solara Auto (car repair + Turbo Kit + Armor Plating upgrades).
+// SOLARA BAY — money, shops and the garage. Buying is plain arithmetic on
+// the player's wallet; the shop and garage modals live in the HUD.
+(function () {
+  'use strict';
+  var SB = window.SB;
+  var cfg = SB.cfg;
+  var U = SB.util;
 
-import { LANDMARKS } from './world.js';
-import { repairPlayerCar } from './player.js';
-
-export const PROPERTIES = [
-  { id: 'garage', name: 'Harbor Garage', price: 4000, income: 150, at: LANDMARKS.garage, owned: false },
-  { id: 'marina', name: 'Solara Marina', price: 12000, income: 400, at: LANDMARKS.marina, owned: false },
-  { id: 'apartment', name: 'Bayview Apartment', price: 8000, income: 250, at: LANDMARKS.apartment, owned: false },
-];
-
-export const SHOP_ITEMS = [
-  { id: 'pistol', name: 'Pistol + 24 ammo', price: 500, owned: (G) => G.player.weaponsOwned.includes('pistol'), apply(G) { G.player.weaponsOwned.push('pistol'); G.player.ammo.pistol += 24; } },
-  { id: 'pistol_ammo', name: 'Pistol ammo x24', price: 120, apply(G) { G.player.ammo.pistol += 24; } },
-  { id: 'smg', name: 'SMG + 60 ammo', price: 1500, owned: (G) => G.player.weaponsOwned.includes('smg'), apply(G) { if (!G.player.weaponsOwned.includes('smg')) G.player.weaponsOwned.push('smg'); G.player.ammo.smg += 60; } },
-  { id: 'smg_ammo', name: 'SMG ammo x60', price: 300, apply(G) { G.player.ammo.smg += 60; } },
-  { id: 'shotgun', name: 'Shotgun + 12 shells', price: 1200, owned: (G) => G.player.weaponsOwned.includes('shotgun'), apply(G) { if (!G.player.weaponsOwned.includes('shotgun')) G.player.weaponsOwned.push('shotgun'); G.player.ammo.shotgun += 12; } },
-  { id: 'shotgun_ammo', name: 'Shotgun shells x12', price: 200, apply(G) { G.player.ammo.shotgun += 12; } },
-  { id: 'rifle', name: 'Rifle + 20 rounds', price: 2500, owned: (G) => G.player.weaponsOwned.includes('rifle'), apply(G) { if (!G.player.weaponsOwned.includes('rifle')) G.player.weaponsOwned.push('rifle'); G.player.ammo.rifle += 20; } },
-  { id: 'rifle_ammo', name: 'Rifle rounds x20', price: 400, apply(G) { G.player.ammo.rifle += 20; } },
-  { id: 'armor', name: 'Body armor (+50 HP)', price: 800, apply(G) { G.player.health = Math.min(100, G.player.health + 50); } },
-];
-
-// Generic shops (diner + auto) share the same shop panel as the gun shop.
-export const SHOPS = [
-  {
-    id: 'gunshop', name: 'Ironworks Arms — Toko Senjata', at: LANDMARKS.gunshop,
-    items: SHOP_ITEMS,
-  },
-  {
-    id: 'diner', name: 'Bayview Diner — Makan & Minum', at: LANDMARKS.diner,
-    items: [
-      { id: 'burger', name: 'Burger Solara (+25 HP)', price: 25, apply(G) { G.player.health = Math.min(100, G.player.health + 25); } },
-      { id: 'coffee', name: 'Kopi Teluk (+10 HP)', price: 10, apply(G) { G.player.health = Math.min(100, G.player.health + 10); } },
-      { id: 'feast', name: 'Paket Keluarga (+50 HP)', price: 60, apply(G) { G.player.health = Math.min(100, G.player.health + 50); } },
-    ],
-  },
-  {
-    id: 'auto', name: 'Solara Auto — Bengkel & Upgrade', at: LANDMARKS.auto,
-    items: [
-      { id: 'repair', name: 'Perbaiki mobil (harus di dalam mobil)', price: 100, apply(G) { if (!repairPlayerCar(G)) G.hud.flash('Masuk ke mobil dulu untuk diperbaiki.'); } },
-      { id: 'turbo', name: 'Turbo Kit (+25% top speed)', price: 2500, owned: (G) => !!G.player.upgrades.turbo, apply(G) { G.player.upgrades.turbo = true; if (G.playerCar) G.playerCar.maxHealth = G.playerCar.maxHealth || 100; } },
-      { id: 'armorplate', name: 'Pelat Baja (damage -33%)', price: 1500, owned: (G) => !!G.player.upgrades.armor, apply(G) { G.player.upgrades.armor = true; } },
-    ],
-  },
-];
-
-export function nearShop(G) {
-  for (const s of SHOPS) {
-    if (Math.hypot(G.player.x - s.at.x, G.player.z - s.at.z) < 12) return s;
-  }
-  return null;
-}
-
-export function nearGunshop(G) {
-  return Math.hypot(G.player.x - LANDMARKS.gunshop.x, G.player.z - LANDMARKS.gunshop.z) < 12;
-}
-
-export function dailyIncome(G) {
-  let total = 0;
-  for (const p of PROPERTIES) if (p.owned) total += p.income;
-  return total;
-}
-
-export function collectDailyIncome(G) {
-  const inc = dailyIncome(G);
-  if (inc > 0) {
-    G.player.money += inc;
-    G.hud.flash(`Pemasukan properti: +$${inc} (hari baru di Solara Bay).`);
-  }
-}
-
-export function tryBuyProperty(G) {
-  for (const p of PROPERTIES) {
-    const d = Math.hypot(G.player.x - p.at.x, G.player.z - p.at.z);
-    if (d < 12 && !p.owned) {
-      if (G.player.money >= p.price) {
-        G.player.money -= p.price;
-        p.owned = true;
-        G.hud.flash(`Kamu membeli ${p.name} seharga $${p.price}! Pemasukan $${p.income}/hari.`);
-        G.audio.missionDone();
-        G.saveGame();
-        return true;
+  SB.economy = {
+    // Where the player is standing right now, if anywhere buyable.
+    zoneAt: function (x, z) {
+      var i, s, d;
+      for (i = 0; i < cfg.places.shops.length; i++) {
+        s = cfg.places.shops[i];
+        d = U.dist2(x, z, s.x, s.z);
+        if (d < s.r * s.r) return { kind: 'shop', shop: s };
       }
-      G.hud.flash(`Uang tidak cukup — ${p.name} harganya $${p.price}.`);
-      return true;
+      var g = cfg.places.garage;
+      if (U.dist2(x, z, g.x, g.z) < g.r * g.r) return { kind: 'garage' };
+      var h = cfg.places.safehouse;
+      if (U.dist2(x, z, h.x, h.z) < h.r * h.r) return { kind: 'safehouse' };
+      var m = cfg.places.marina;
+      if (U.dist2(x, z, m.x, m.z) < m.r * m.r) return { kind: 'marina' };
+      return null;
+    },
+
+    itemsFor: function (shop) {
+      if (!shop) return cfg.economy.shopItems;
+      if (shop.kind === 'weapons') {
+        return cfg.economy.shopItems.filter(function (it) {
+          return ['rifle', 'ammo-rifle', 'ammo-pistol', 'armor'].indexOf(it.id) >= 0;
+        });
+      }
+      return cfg.economy.shopItems.filter(function (it) {
+        return ['snack', 'medkit', 'armor'].indexOf(it.id) >= 0;
+      });
+    },
+
+    buy: function (id, ctx) {
+      var p = ctx.player;
+      var item = null;
+      for (var i = 0; i < cfg.economy.shopItems.length; i++) {
+        if (cfg.economy.shopItems[i].id === id) item = cfg.economy.shopItems[i];
+      }
+      if (!item) return { ok: false, msg: 'No such item.' };
+      if (p.money < item.price) return { ok: false, msg: 'Not enough cash.' };
+      p.money -= item.price;
+      if (id === 'rifle') { p.weapon = 'rifle'; p.ammoRifle += 30; }
+      else if (id === 'ammo-rifle') p.ammoRifle += 30;
+      else if (id === 'ammo-pistol') p.ammoPistol += 24;
+      else if (id === 'armor') p.armor = true;
+      else if (id === 'snack') p.heal(25);
+      else if (id === 'medkit') p.heal(1000);
+      ctx.onEvent('bought', { item: item });
+      return { ok: true, msg: 'Bought ' + item.name + '.' };
+    },
+
+    buyUpgrade: function (id, ctx) {
+      var p = ctx.player;
+      var up = null;
+      for (var i = 0; i < cfg.economy.garageUpgrades.length; i++) {
+        if (cfg.economy.garageUpgrades[i].id === id) up = cfg.economy.garageUpgrades[i];
+      }
+      if (!up) return { ok: false, msg: 'No such upgrade.' };
+      if (p.money < up.price) return { ok: false, msg: 'Not enough cash.' };
+      if (id === 'engine' && p.upgrades.engine) return { ok: false, msg: 'Turbo already fitted.' };
+      if (id === 'armor-car' && p.upgrades.armorCar) return { ok: false, msg: 'Armor already fitted.' };
+      p.money -= up.price;
+      if (id === 'engine') {
+        p.upgrades.engine = true;
+        if (p.inCar) p.inCar.upgrade.engine = true;
+      } else if (id === 'armor-car') {
+        p.upgrades.armorCar = true;
+        if (p.inCar) p.inCar.upgrade.armor = true;
+      } else if (id === 'paint') {
+        if (p.inCar) p.inCar.group.children[0].material.color.setHex(0xe07b39);
+      }
+      ctx.onEvent('bought', { item: up });
+      return { ok: true, msg: 'Fitted: ' + up.name + '.' };
+    },
+
+    // Safehouse: heal up and save the game.
+    rest: function (ctx) {
+      var p = ctx.player;
+      p.heal(1000);
+      SB.save.saveGame(ctx);
+      ctx.onEvent('rested', {});
     }
-    if (d < 12 && p.owned) { G.hud.flash(`${p.name} sudah milikmu. Pemasukan $${p.income}/hari.`); return true; }
-  }
-  return false;
-}
+  };
+})();

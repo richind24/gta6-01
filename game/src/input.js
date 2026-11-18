@@ -1,46 +1,53 @@
-// Input: keyboard state, mouse orbit (drag), click-to-shoot, wheel zoom.
-// Rebuild (Nov 2026): R (radio) and Digit5 (rifle) join the prevent-default
-// list so the browser never steals those keys mid-game.
+// SOLARA BAY — keyboard and mouse. Held keys live in `keys`, edge presses
+// in `pressed` (cleared once per frame by the main loop). Dragging with the
+// mouse orbits the camera; the wheel zooms.
+(function () {
+  'use strict';
+  var SB = window.SB;
 
-export function createInput(G) {
-  const input = {
-    up: false, down: false, left: false, right: false, shift: false,
-    mouseDX: 0, mouseDY: 0, shooting: false, dragging: false,
-    pressed: {}, // edge-triggered keys, consumed by the game loop
-  };
-  const keyMap = {
-    KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down',
-    KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
-    ShiftLeft: 'shift', ShiftRight: 'shift',
-  };
-  window.addEventListener('keydown', (e) => {
-    if (keyMap[e.code] !== undefined) { input[keyMap[e.code]] = true; e.preventDefault(); }
-    if (!e.repeat) input.pressed[e.code] = true;
-    if (['Space', 'KeyE', 'KeyR', 'KeyM', 'Escape', 'Enter', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].includes(e.code)) e.preventDefault();
-  });
-  window.addEventListener('keyup', (e) => {
-    if (keyMap[e.code] !== undefined) input[keyMap[e.code]] = false;
-  });
-  const canvas = document.getElementById('game');
-  canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 0) { input.shooting = true; input.dragging = true; }
-  });
-  window.addEventListener('mouseup', (e) => {
-    if (e.button === 0) { input.shooting = false; input.dragging = false; }
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (input.dragging) {
-      input.mouseDX += e.movementX || 0;
-      input.mouseDY += e.movementY || 0;
+  SB.input = {
+    keys: new Set(),
+    pressed: new Set(),
+    mouseDX: 0, mouseDY: 0, wheel: 0,
+    shootHeld: false, dragging: false,
+    query: new URLSearchParams(window.location.search),
+    shot: null,
+
+    init: function (canvas) {
+      this.shot = this.query.get('shot');
+      var self = this;
+      window.addEventListener('keydown', function (e) {
+        if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].indexOf(e.code) >= 0) e.preventDefault();
+        if (!e.repeat) self.pressed.add(e.code);
+        self.keys.add(e.code);
+        if (e.code === 'KeyM') SB.audio.setMuted(!SB.audio.muted);
+      });
+      window.addEventListener('keyup', function (e) { self.keys.delete(e.code); });
+      window.addEventListener('blur', function () { self.keys.clear(); self.shootHeld = false; });
+      canvas.addEventListener('mousedown', function (e) {
+        if (e.button === 0) { self.shootHeld = true; self.dragging = true; }
+      });
+      window.addEventListener('mouseup', function (e) {
+        if (e.button === 0) { self.shootHeld = false; self.dragging = false; }
+      });
+      window.addEventListener('mousemove', function (e) {
+        if (!self.dragging) return;
+        self.mouseDX += e.movementX || 0;
+        self.mouseDY += e.movementY || 0;
+      });
+      canvas.addEventListener('wheel', function (e) {
+        e.preventDefault();
+        self.wheel += e.deltaY;
+      }, { passive: false });
+      // first gesture unlocks audio
+      var unlock = function () { SB.audio.init(); };
+      window.addEventListener('pointerdown', unlock, { once: true });
+      window.addEventListener('keydown', unlock, { once: true });
+    },
+
+    endFrame: function () {
+      this.pressed.clear();
+      this.mouseDX = 0; this.mouseDY = 0; this.wheel = 0;
     }
-  });
-  canvas.addEventListener('wheel', (e) => {
-    G.player.camDist = Math.max(4.5, Math.min(13, G.player.camDist + Math.sign(e.deltaY) * 0.8));
-    e.preventDefault();
-  }, { passive: false });
-  window.addEventListener('blur', () => {
-    input.up = input.down = input.left = input.right = input.shift = false;
-    input.shooting = false; input.dragging = false;
-  });
-  return input;
-}
+  };
+})();
