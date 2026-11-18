@@ -1,53 +1,53 @@
-// SOLARA BAY — keyboard and mouse. Held keys live in `keys`, edge presses
-// in `pressed` (cleared once per frame by the main loop). Dragging with the
-// mouse orbits the camera; the wheel zooms.
-(function () {
-  'use strict';
-  var SB = window.SB;
+// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
+// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
+// frames is never lost and never counted twice.
 
-  SB.input = {
-    keys: new Set(),
-    pressed: new Set(),
-    mouseDX: 0, mouseDY: 0, wheel: 0,
-    shootHeld: false, dragging: false,
-    query: new URLSearchParams(window.location.search),
-    shot: null,
+export const ACTION_CONFIRM = 1;
+export const ACTION_PAUSE = 2;
 
-    init: function (canvas) {
-      this.shot = this.query.get('shot');
-      var self = this;
-      window.addEventListener('keydown', function (e) {
-        if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].indexOf(e.code) >= 0) e.preventDefault();
-        if (!e.repeat) self.pressed.add(e.code);
-        self.keys.add(e.code);
-        if (e.code === 'KeyM') SB.audio.setMuted(!SB.audio.muted);
-      });
-      window.addEventListener('keyup', function (e) { self.keys.delete(e.code); });
-      window.addEventListener('blur', function () { self.keys.clear(); self.shootHeld = false; });
-      canvas.addEventListener('mousedown', function (e) {
-        if (e.button === 0) { self.shootHeld = true; self.dragging = true; }
-      });
-      window.addEventListener('mouseup', function (e) {
-        if (e.button === 0) { self.shootHeld = false; self.dragging = false; }
-      });
-      window.addEventListener('mousemove', function (e) {
-        if (!self.dragging) return;
-        self.mouseDX += e.movementX || 0;
-        self.mouseDY += e.movementY || 0;
-      });
-      canvas.addEventListener('wheel', function (e) {
-        e.preventDefault();
-        self.wheel += e.deltaY;
-      }, { passive: false });
-      // first gesture unlocks audio
-      var unlock = function () { SB.audio.init(); };
-      window.addEventListener('pointerdown', unlock, { once: true });
-      window.addEventListener('keydown', unlock, { once: true });
+const LEFT = new Set(['ArrowLeft', 'KeyA']);
+const RIGHT = new Set(['ArrowRight', 'KeyD']);
+const CONFIRM = new Set(['Space', 'Enter']);
+const PAUSE = new Set(['KeyP', 'Escape']);
+
+export function createInput(target) {
+  let left = false;
+  let right = false;
+  let actions = 0;
+
+  window.addEventListener('keydown', (event) => {
+    if (LEFT.has(event.code)) left = true;
+    else if (RIGHT.has(event.code)) right = true;
+    else if (CONFIRM.has(event.code)) {
+      if (!event.repeat) actions |= ACTION_CONFIRM;
+    } else if (PAUSE.has(event.code)) {
+      if (!event.repeat) actions |= ACTION_PAUSE;
+    } else return;
+    event.preventDefault();
+  });
+  window.addEventListener('keyup', (event) => {
+    if (LEFT.has(event.code)) left = false;
+    else if (RIGHT.has(event.code)) right = false;
+  });
+  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
+  window.addEventListener('blur', () => {
+    left = false;
+    right = false;
+  });
+  target.addEventListener('pointerdown', () => {
+    actions |= ACTION_CONFIRM;
+  });
+
+  return {
+    /** -1 for left, 1 for right, 0 for neither or both. */
+    direction() {
+      return (right ? 1 : 0) - (left ? 1 : 0);
     },
-
-    endFrame: function () {
-      this.pressed.clear();
-      this.mouseDX = 0; this.mouseDY = 0; this.wheel = 0;
-    }
+    /** The one-shot presses since the last call, as ACTION_* flags. */
+    takeActions() {
+      const taken = actions;
+      actions = 0;
+      return taken;
+    },
   };
-})();
+}
