@@ -1,11 +1,13 @@
 // People: the player character model, pedestrians with sidewalk AI, and fleeing drivers.
+// Rebuild (Nov 2026): more variety — joggers run the beach strip, beachgoers
+// stroll the sand, and shirt/skin variety grew so noon streets read crowded.
 
 import { CITY, roadLines, clamp, lerp, rand, pick, nearestIntersection } from './config.js';
 import { collideCircle } from './world.js';
 
-const SKINS = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac];
-const SHIRTS = [0xd64545, 0x3d7ab8, 0x4caf50, 0xe6a817, 0x8e44ad, 0xecf0f1, 0x2c3e50, 0xd35400];
-const PANTS = [0x2c3e50, 0x34495e, 0x7f8c8d, 0x1a1a1a, 0x5d6d7e];
+const SKINS = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac, 0xa67c52];
+const SHIRTS = [0xd64545, 0x3d7ab8, 0x4caf50, 0xe6a817, 0x8e44ad, 0xecf0f1, 0x2c3e50, 0xd35400, 0xff6b9d, 0x00b8a9, 0xffd21f];
+const PANTS = [0x2c3e50, 0x34495e, 0x7f8c8d, 0x1a1a1a, 0x5d6d7e, 0xc0392b];
 
 // Simple articulated low-poly person: torso, head, arms, legs (limbs swing when walking).
 export function makePersonModel(G, skin, shirt, pants, isPlayer) {
@@ -69,6 +71,24 @@ export function spawnPedestrians(G, count) {
     const ped = {
       model, x, z, heading: rng() * Math.PI * 2, speed: rand(rng, 1.0, 1.8),
       target: null, wait: rand(rng, 0, 4), panic: 0, phase: rng() * 6,
+      jogger: false,
+    };
+    model.position.set(x, 0, z);
+    model.rotation.y = ped.heading;
+    model.userData.ownerRef = { kind: 'ped', ref: ped };
+    G.peds.push(ped);
+  }
+  // joggers on the beach strip + beachgoers strolling the sand
+  for (let i = 0; i < 8; i++) {
+    const x = rand(rng, -240, 240);
+    const z = CITY.waterAt + rand(rng, 8, 34);
+    const model = makePersonModel(G, pick(rng, SKINS), pick(rng, SHIRTS), pick(rng, PANTS), false);
+    const jogger = rng() < 0.5;
+    const ped = {
+      model, x, z, heading: rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2,
+      speed: jogger ? rand(rng, 3.2, 4.2) : rand(rng, 0.8, 1.4),
+      target: null, wait: 0, panic: 0, phase: rng() * 6,
+      jogger, beach: true,
     };
     model.position.set(x, 0, z);
     model.rotation.y = ped.heading;
@@ -98,6 +118,12 @@ export function updatePedestrians(G, dt) {
       ped.heading = Math.atan2(dx / d, dz / d);
       ped.x += Math.sin(ped.heading) * 4.2 * dt;
       ped.z += Math.cos(ped.heading) * 4.2 * dt;
+    } else if (ped.beach) {
+      // beach folk stroll along the sand, turning at the ends
+      ped.x += Math.sin(ped.heading) * ped.speed * dt;
+      if (ped.x > 250 || ped.x < -250) ped.heading = -ped.heading;
+      ped.phase += dt * ped.speed * 5;
+      animateWalk(ped.model, ped.phase, ped.jogger ? 1.6 : 1);
     } else {
       if (ped.wait > 0) { ped.wait -= dt; animateIdle(ped.model, G.time); }
       else {

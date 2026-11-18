@@ -1,4 +1,7 @@
 // Player: on-foot movement, entering/exiting vehicles, health and camera.
+// Rebuild (Nov 2026): the player now carries garage upgrades (turbo, armor)
+// that driving and combat read, and the camera defaults a touch wider so the
+// noon cover frame shows more of the street.
 
 import { clamp, lerp, lerpAngle, dist2d } from './config.js';
 import { collideCircle } from './world.js';
@@ -9,9 +12,10 @@ export function createPlayer(G) {
   return {
     x: -64, z: 88, heading: Math.PI, speed: 0, phase: 0,
     health: 100, money: 250, model: null,
-    weapon: 'fists', ammo: { pistol: 24, smg: 0, shotgun: 0 },
+    weapon: 'fists', ammo: { pistol: 24, smg: 0, shotgun: 0, rifle: 0 },
     weaponsOwned: ['fists', 'pistol'],
-    camYaw: Math.PI, camPitch: 0.32, camDist: 7.5,
+    upgrades: { turbo: false, armor: false }, // Solara Auto garage upgrades
+    camYaw: Math.PI, camPitch: 0.32, camDist: 8.0,
     invuln: 0, dead: false,
   };
 }
@@ -77,7 +81,7 @@ export function enterCar(G, car) {
     // driver becomes a panicking pedestrian
     const dModel = makePersonModel(G, 0xc68642, 0xd64545, 0x2c3e50, false);
     dModel.position.set(car.x + 2, 0, car.z + 2);
-    const ped = { model: dModel, x: car.x + 2, z: car.z + 2, heading: 0, speed: 2, target: null, wait: 0, panic: 6, phase: 0 };
+    const ped = { model: dModel, x: car.x + 2, z: car.z + 2, heading: 0, speed: 2, target: null, wait: 0, panic: 6, phase: 0, jogger: false, beach: false };
     dModel.userData.ownerRef = { kind: 'ped', ref: ped };
     G.peds.push(ped);
   }
@@ -110,6 +114,8 @@ export function exitCar(G) {
 export function damagePlayer(G, amount) {
   const p = G.player;
   if (p.invuln > 0 || p.dead) return;
+  // armor plating (Solara Auto) soaks a third of every hit
+  if (p.upgrades && p.upgrades.armor) amount = Math.ceil(amount * 0.67);
   p.health -= amount;
   p.invuln = 0.4;
   G.hud.damageFlash();
@@ -118,4 +124,13 @@ export function damagePlayer(G, amount) {
     p.dead = true;
     G.wasted();
   }
+}
+
+// Repair the player's current car at Solara Auto (called by the shop).
+export function repairPlayerCar(G) {
+  const car = G.playerCar;
+  if (!car) return false;
+  car.health = car.maxHealth || 100;
+  car.model.children.forEach((c) => { if (c.material && c.material.color) c.material.color.setHex(0xffffff); });
+  return true;
 }

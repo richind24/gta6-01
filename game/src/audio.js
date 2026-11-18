@@ -1,10 +1,15 @@
 // Audio: everything synthesized with WebAudio — no audio files.
-// Engine hum, gunshots, siren, UI clicks, explosion, and a simple bassline loop.
+// Engine hum, gunshots, siren, UI clicks, explosion, and a radio music loop.
+// Rebuild (Nov 2026): the music loop now follows the active radio station —
+// each station has its own bassline, tempo and waveform (see radio.js).
+
+import { STATIONS } from './radio.js';
 
 export function createAudio() {
   const A = {
     ctx: null, master: null, engineOsc: null, engineGain: null, engineFilter: null,
     musicOn: true, musicTimer: null, sirenOsc: null, sirenGain: null, sirenOn: false,
+    station: STATIONS[0],
     ensure() {
       if (A.ctx) { if (A.ctx.state === 'suspended') A.ctx.resume(); return true; }
       try {
@@ -38,6 +43,12 @@ export function createAudio() {
         A.startMusic();
         return true;
       } catch (e) { A.ctx = null; return false; }
+    },
+    // Switch the music loop to a radio station's groove.
+    setStation(st) {
+      if (!st) return;
+      A.station = st;
+      if (A.ctx) A.startMusic();
     },
     engine(ratio, speed) {
       if (!A.ctx || !A.engineOsc) return;
@@ -92,20 +103,21 @@ export function createAudio() {
         A.sirenOsc.frequency.setTargetAtTime(A.sirenPhase % 2 ? 700 : 950, A.ctx.currentTime, 0.05);
       }
     },
-    // Lo-fi bassline + hats, scheduled in a loop.
+    // Radio groove: the active station's bassline + hats, scheduled in a loop.
     startMusic() {
-      if (!A.ctx || A.musicTimer) return;
-      const bassNotes = [55, 55, 65.41, 49, 55, 55, 82.41, 73.42];
+      if (!A.ctx) return;
+      if (A.musicTimer) { clearInterval(A.musicTimer); A.musicTimer = null; }
+      const st = A.station || STATIONS[0];
+      const bassNotes = st.bass;
       let step = 0;
       A.musicTimer = setInterval(() => {
         if (!A.musicOn || !A.ctx) return;
-        const bar = Math.floor(step / 8) % 2;
         const note = bassNotes[step % 8];
-        A.tone(note, 0.42, 0.16, 'triangle');
+        A.tone(note, 0.42, 0.16, st.wave || 'triangle');
         if (step % 2 === 0) A.noiseBurst(0.03, 0.05, 8000);
         if (step % 8 === 4) A.tone(note * 2, 0.2, 0.06, 'sine');
         step++;
-      }, 240);
+      }, st.tempo || 240);
     },
   };
   return A;

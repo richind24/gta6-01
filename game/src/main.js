@@ -1,20 +1,25 @@
 // SOLARA BAY — an original open-world crime sandbox.
 // Dax Rivers returns to his home city to take it back from the Kessler family,
 // one job at a time. All names, places and characters are original fiction.
+// Rebuild (Nov 2026): 10 story missions, police helicopter, 3 radio stations,
+// diner + auto shops, safehouse property, garage upgrades, rifle — same city,
+// much denser systems, bright noon cover.
 
-import { CITY, SAVE_KEY, clamp, lerp, lerpAngle } from './config.js';
-import { buildCity, LANDMARKS } from './world.js';
+import { CITY, SAVE_KEY, STORY_TOTAL, clamp, lerp, lerpAngle, money } from './config.js';
+import { buildCity, LANDMARKS, insideOwnedProperty } from './world.js';
 import { spawnTraffic, updateTraffic, drivePlayerCar, spawnCar } from './vehicles.js';
 import { makePersonModel, spawnPedestrians, updatePedestrians } from './people.js';
 import { createPlayer, initPlayerModel, updatePlayerOnFoot, nearestCar, enterCar, exitCar, damagePlayer } from './player.js';
 import { addWanted, updatePolice, clearPolice } from './police.js';
-import { tryShoot, updateEnemies, WEAPONS } from './combat.js';
+import { tryShoot, updateEnemies, WEAPONS, WEAPON_ORDER } from './combat.js';
 import { createMissions, startStoryMission, startSideMission, updateMissions, buildMarker, updateMarker, tryStartNextStory, STORY } from './missions.js';
 import { createWeather, updateWeather } from './weather.js';
 import { createAudio } from './audio.js';
 import { createHud } from './hud.js';
 import { createInput } from './input.js';
 import { applyShot } from './shots.js';
+import { createHeli } from './heli.js';
+import { createRadio } from './radio.js';
 import * as economy from './economy.js';
 
 const params = new URLSearchParams(location.search);
@@ -28,6 +33,7 @@ const G = {
   inSafehouse: false, paused: false, started: false, gameOver: false,
   shootCooldown: 0, shake: 0, missionEnemies: [],
   weather: null, audio: null, hud: null, input: null, missions: null, economy,
+  heli: null, radio: null,
 };
 
 G.addWanted = (stars, reason) => { addWanted(G, stars, reason); G.recentCrime = 8; };
@@ -69,6 +75,7 @@ function saveGame() {
       money: G.player.money, health: G.player.health, storyIndex: G.missions.storyIndex,
       properties: economy.PROPERTIES.map((p) => p.owned),
       weaponsOwned: G.player.weaponsOwned, ammo: G.player.ammo,
+      upgrades: G.player.upgrades, radio: G.radio ? G.radio.station().id : 'bayview',
       x: G.player.x, z: G.player.z, timeOfDay: G.weather.timeOfDay, day: G.weather.day,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -84,7 +91,9 @@ function loadGame() {
     G.missions.storyIndex = d.storyIndex || 0;
     economy.PROPERTIES.forEach((p, i) => { p.owned = !!d.properties[i]; });
     G.player.weaponsOwned = d.weaponsOwned || ['fists', 'pistol'];
-    G.player.ammo = d.ammo || { pistol: 24, smg: 0, shotgun: 0 };
+    G.player.ammo = d.ammo || { pistol: 24, smg: 0, shotgun: 0, rifle: 0 };
+    G.player.upgrades = d.upgrades || { turbo: false, armor: false };
+    if (d.radio && G.radio) G.radio.setStation(d.radio);
     G.player.x = d.x ?? -64; G.player.z = d.z ?? 88;
     G.weather.timeOfDay = d.timeOfDay ?? 10; G.weather.day = d.day ?? 1;
     return true;
@@ -136,7 +145,7 @@ function init() {
   G.renderer.shadowMap.enabled = true;
   G.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   G.scene = new THREE.Scene();
-  G.scene.background = new THREE.Color(0x7ec0ee);
+  G.scene.background = new THREE.Color(0x4aa8e8);
   G.camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 1200);
   G.camera.position.set(-40, 26, 150);
   G.camera.lookAt(0, 10, 0);
@@ -147,11 +156,13 @@ function init() {
   G.missions = createMissions(G);
   G.hud = createHud(G);
   G.input = createInput(G);
+  G.heli = createHeli(G);
+  G.radio = createRadio(G);
 
   buildCity(G);
   initPlayerModel(G, makePersonModel);
   spawnTraffic(G);
-  spawnPedestrians(G, 42);
+  spawnPedestrians(G, 56);
   buildMarker(G);
   updateMarker(G);
 
@@ -169,7 +180,7 @@ function init() {
     applyShot(G, SHOT);
     updateMarker(G);
   } else {
-    G.hud.showMenu('SOLARA BAY', 'Kota ini milik keluarga Kessler. Dax Rivers pulang untuk mengambilnya kembali.<br><br><b>Kontrol:</b> WASD bergerak / mengemudi &nbsp;•&nbsp; Mouse: putar kamera, klik: tembak &nbsp;•&nbsp; <b>E</b>: masuk/keluar mobil, mulai misi &nbsp;•&nbsp; <b>1-4</b>: ganti senjata &nbsp;•&nbsp; <b>Shift</b>: lari &nbsp;•&nbsp; <b>Esc</b>: jeda', [
+    G.hud.showMenu('SOLARA BAY', 'Kota ini milik keluarga Kessler. Dax Rivers pulang untuk mengambilnya kembali.<br><br><b>Kontrol:</b> WASD bergerak / mengemudi &nbsp;•&nbsp; Mouse: putar kamera, klik: tembak &nbsp;•&nbsp; <b>E</b>: masuk/keluar mobil, mulai misi, buka toko &nbsp;•&nbsp; <b>1-5</b>: ganti senjata &nbsp;•&nbsp; <b>R</b>: ganti stasiun radio &nbsp;•&nbsp; <b>Shift</b>: lari &nbsp;•&nbsp; <b>Esc</b>: jeda', [
       { label: hasSave ? 'Lanjutkan' : 'Mulai Cerita Baru', fn: () => { if (hasSave) loadGame(); startGame(true); } },
       ...(hasSave ? [{ label: 'Cerita Baru (hapus save)', fn: () => { localStorage.removeItem(SAVE_KEY); startGame(true); } }] : []),
     ]);
@@ -182,7 +193,7 @@ function startGame(withIntro) {
   G.paused = false;
   G.hud.hideMenu();
   G.audio.ensure();
-  if (withIntro) G.hud.showMissionCard('SOLARA BAY', 'Dax Rivers pulang. Temui Mara Voss di The Rusty Anchor.');
+  if (withIntro) G.hud.showMissionCard('SOLARA BAY', 'Dax Rivers pulang. Temui Mara Voss di The Rusty Anchor. Tekan R untuk ganti radio.');
 }
 
 // ---------- camera ----------
@@ -229,7 +240,8 @@ function handleKeys() {
     if (G.inCar) { exitCar(G); return; }
     if (tryStartNextStory(G)) return;
     if (economy.tryBuyProperty(G)) return;
-    if (economy.nearGunshop(G)) { G.hud.showShop(); return; }
+    const shop = economy.nearShop(G);
+    if (shop) { G.hud.showShop(shop); return; }
     const car = nearestCar(G, 4.5);
     if (car) { enterCar(G, car); return; }
   }
@@ -239,13 +251,14 @@ function handleKeys() {
     if (G.hud.shop.style.display === 'block') { G.hud.shop.style.display = 'none'; G.paused = false; return; }
     G.paused = !G.paused;
     if (G.paused) {
-      G.hud.showMenu('JEDA', `Uang: $${Math.floor(p.money)} &nbsp;•&nbsp; Misi cerita: ${G.missions.storyIndex}/4 selesai<br>Properti: ${economy.PROPERTIES.filter((x) => x.owned).map((x) => x.name).join(', ') || 'belum ada'}`, [
+      G.hud.showMenu('JEDA', `Uang: ${money(p.money)} &nbsp;•&nbsp; Misi cerita: ${Math.min(G.missions.storyIndex, STORY_TOTAL)}/${STORY_TOTAL} selesai<br>Properti: ${economy.PROPERTIES.filter((x) => x.owned).map((x) => x.name).join(', ') || 'belum ada'}<br>Radio: ${G.radio.label()}`, [
         { label: 'Lanjutkan', fn: () => { G.paused = false; G.hud.hideMenu(); } },
         { label: 'Simpan Game', fn: () => { saveGame(); G.hud.flash('Game tersimpan.'); G.paused = false; G.hud.hideMenu(); } },
         { label: 'Misi Sampingan: Taxi ($150)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'taxi'); } },
         { label: 'Misi Sampingan: Balapan ($500)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'race'); } },
         { label: 'Misi Sampingan: Kurir ($200)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'delivery'); } },
         { label: 'Misi Sampingan: Rampok Toko ($400)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'robbery'); } },
+        { label: 'Misi Sampingan: Tur Foto ($250)', fn: () => { G.paused = false; G.hud.hideMenu(); startSideMission(G, 'photo'); } },
       ]);
     } else G.hud.hideMenu();
   }
@@ -254,12 +267,15 @@ function handleKeys() {
     G.audio.musicOn = !G.audio.musicOn;
     G.hud.flash(G.audio.musicOn ? 'Musik: nyala' : 'Musik: mati');
   }
-  const weaponKeys = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 };
-  for (const [code, idx] of Object.entries(weaponKeys)) {
+  if (inp.pressed.KeyR) {
+    inp.pressed.KeyR = false;
+    if (G.started && !G.paused && !G.gameOver) G.radio.next();
+  }
+  for (let idx = 0; idx < WEAPON_ORDER.length; idx++) {
+    const code = 'Digit' + (idx + 1);
     if (inp.pressed[code]) {
       inp.pressed[code] = false;
-      const order = ['fists', 'pistol', 'smg', 'shotgun'];
-      const w = order[idx];
+      const w = WEAPON_ORDER[idx];
       if (p.weaponsOwned.includes(w)) {
         p.weapon = w;
         p.model.userData.gun.visible = w !== 'fists';
@@ -276,10 +292,11 @@ function updatePrompt() {
   if (!G.started || G.paused || G.gameOver) { G.hud.setPrompt(''); return; }
   if (G.inCar) { G.hud.setPrompt('E — keluar dari mobil'); return; }
   if (tryStartNextStoryPeek()) { G.hud.setPrompt('E — mulai misi: ' + STORY[G.missions.storyIndex].name); return; }
-  if (economy.nearGunshop(G)) { G.hud.setPrompt('E — buka Ironworks Arms (toko senjata)'); return; }
+  const shop = economy.nearShop(G);
+  if (shop) { G.hud.setPrompt(`E — buka ${shop.name}`); return; }
   for (const pr of economy.PROPERTIES) {
     if (Math.hypot(G.player.x - pr.at.x, G.player.z - pr.at.z) < 12) {
-      G.hud.setPrompt(pr.owned ? `E — ${pr.name} (milikmu)` : `E — beli ${pr.name} ($${pr.price})`);
+      G.hud.setPrompt(pr.owned ? `E — ${pr.name} (milikmu)` : `E — beli ${pr.name} (${money(pr.price)})`);
       return;
     }
   }
@@ -341,7 +358,7 @@ function loop(now) {
   // siren audio follows wanted level
   G.audio.setSiren(G.wanted > 0, G.policeCars.length ? Math.hypot(G.policeCars[0].x - G.player.x, G.policeCars[0].z - G.player.z) : 200);
   // safehouse: inside owned property radius hides the player from police
-  G.inSafehouse = economy.PROPERTIES.some((pr) => pr.owned && Math.hypot(G.player.x - pr.at.x, G.player.z - pr.at.z) < 14);
+  G.inSafehouse = insideOwnedProperty(G, G.player.x, G.player.z, 14);
   updateCamera(dt);
   updatePrompt();
   G.hud.update(dt);

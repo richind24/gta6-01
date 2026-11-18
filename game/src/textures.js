@@ -1,5 +1,7 @@
 // Procedural canvas textures: building facades, the ground map and the sky.
 // Everything is generated at runtime — no image files, no network.
+// Rebuild (Nov 2026): palettes pushed brighter and more saturated so the noon
+// cover frame reads vivid instead of muted; beach sand and park greens warmed up.
 
 import { CITY, roadLines, mulberry32, rand, pick } from './config.js';
 
@@ -9,10 +11,12 @@ function makeCanvas(w, h) {
   return [c, c.getContext('2d')];
 }
 
+// Brighter, sun-bleached coastal palettes (was: grey-brown muted set).
 const PALETTES = [
-  ['#8a7f72', '#6f7d8c', '#a08b6d', '#7d7468'],
-  ['#5d6b7a', '#94806a', '#7a6a72', '#66755f'],
-  ['#b0a08a', '#8c8578', '#74655c', '#9a8f7a'],
+  ['#b08a68', '#7fa3b8', '#c9a06a', '#94a8b0'],
+  ['#7d95a8', '#c08a6a', '#a08a9a', '#8aa87a'],
+  ['#d0b890', '#a89a88', '#8a7a6e', '#b8a88e'],
+  ['#e8c88a', '#9ab8c8', '#c89a7a', '#a8b898'],
 ];
 
 // One facade texture: rows of windows, some lit (emissive map shares the same canvas).
@@ -22,7 +26,7 @@ export function buildingTexture(rng, litRatio) {
   g.fillStyle = base; g.fillRect(0, 0, 128, 256);
   // subtle vertical shading
   const grad = g.createLinearGradient(0, 0, 128, 0);
-  grad.addColorStop(0, 'rgba(0,0,0,0.25)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.06)'); grad.addColorStop(1, 'rgba(0,0,0,0.25)');
+  grad.addColorStop(0, 'rgba(0,0,0,0.22)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.08)'); grad.addColorStop(1, 'rgba(0,0,0,0.22)');
   g.fillStyle = grad; g.fillRect(0, 0, 128, 256);
   const cols = 5 + Math.floor(rng() * 3);
   const rows = 8 + Math.floor(rng() * 8);
@@ -39,6 +43,9 @@ export function buildingTexture(rng, litRatio) {
   g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, 256 - ch * 0.9, 128, ch * 0.9);
   g.fillStyle = rng() < 0.5 ? '#3fa7a0' : '#c98a3a';
   g.fillRect(8, 256 - ch * 0.75, 112, ch * 0.45);
+  // bright awning stripe above the shopfront
+  g.fillStyle = pick(rng, ['#ff5a3c', '#ffd21f', '#3ca7c9', '#2ecc71']);
+  g.fillRect(0, 256 - ch * 1.15, 128, ch * 0.22);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -50,10 +57,10 @@ export function groundTexture() {
   const S = 2048, [c, g] = makeCanvas(S, S);
   const half = CITY.half + 40;
   const toPx = (v) => ((v + half) / (half * 2)) * S;
-  // base: dry grass / dirt
-  g.fillStyle = '#7d8a55'; g.fillRect(0, 0, S, S);
-  // city blocks (concrete)
-  g.fillStyle = '#9a9a92';
+  // base: sun-warmed grass / dirt
+  g.fillStyle = '#8a9a58'; g.fillRect(0, 0, S, S);
+  // city blocks (warm concrete)
+  g.fillStyle = '#a8a49a';
   const lines = roadLines();
   for (let i = 0; i < lines.length - 1; i++) {
     for (let j = 0; j < lines.length - 1; j++) {
@@ -63,19 +70,19 @@ export function groundTexture() {
     }
   }
   // central park block
-  g.fillStyle = '#4d7a3d';
+  g.fillStyle = '#5d8a46';
   g.fillRect(toPx(-CITY.block + CITY.roadW / 2), toPx(-CITY.block + CITY.roadW / 2), toPx(CITY.block - CITY.roadW / 2) - toPx(-CITY.block + CITY.roadW / 2), toPx(CITY.block - CITY.roadW / 2) - toPx(-CITY.block + CITY.roadW / 2));
-  // beach strip along the south edge (z from -328 to waterAt+8)
-  g.fillStyle = '#d9c48f';
+  // beach strip along the south edge (z from -328 to waterAt+8) — bright sand
+  g.fillStyle = '#e8d49a';
   g.fillRect(0, toPx(CITY.waterAt - 40), S, toPx(CITY.waterAt + 8) - toPx(CITY.waterAt - 40));
   // roads
-  g.fillStyle = '#6e7176';
+  g.fillStyle = '#7a7d82';
   for (const l of lines) {
     g.fillRect(0, toPx(l - CITY.roadW / 2), S, toPx(l + CITY.roadW / 2) - toPx(l - CITY.roadW / 2));
     g.fillRect(toPx(l - CITY.roadW / 2), 0, toPx(l + CITY.roadW / 2) - toPx(l - CITY.roadW / 2), S);
   }
   // lane dashes
-  g.fillStyle = '#e8d44d';
+  g.fillStyle = '#f0d44d';
   const dash = 14, gap = 18;
   for (const l of lines) {
     for (let p = 0; p < S; p += dash + gap) {
@@ -84,7 +91,7 @@ export function groundTexture() {
     }
   }
   // crosswalks at intersections
-  g.fillStyle = 'rgba(255,255,255,0.75)';
+  g.fillStyle = 'rgba(255,255,255,0.8)';
   for (const lx of lines) for (const lz of lines) {
     for (let k = -2; k <= 2; k++) {
       g.fillRect(toPx(lx + k * 3) - 2, toPx(lz - CITY.roadW / 2), 4, CITY.roadW * 0.32 * (S / (half * 2)));

@@ -1,5 +1,7 @@
 // Solara Bay — shared constants, helpers and the seeded RNG.
 // All names, places and characters in this game are original fiction.
+// Rebuild (Nov 2026): brighter noon palette hooks, money formatting, and the
+// story-mission count the HUD and pause menu read from one place.
 
 export const CITY = {
   blocks: 4,            // road lines at -4..4 (9 x 9 grid of roads)
@@ -10,7 +12,10 @@ export const CITY = {
 };
 
 export const DAY_LENGTH = 480; // seconds of real time per in-game day
-export const SAVE_KEY = 'solara-bay-save-v1';
+export const SAVE_KEY = 'solara-bay-save-v2'; // v2: story is 10 missions, save adds upgrades
+export const NOON_HOUR = 12; // cover / screenshot time: bright saturated noon
+export const STORY_TOTAL = 10; // story missions in the rebuild arc
+export const HELI_WANTED = 3; // wanted level at which the police helicopter arrives
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -33,6 +38,7 @@ export const lerpAngle = (a, b, t) => {
 export const dist2d = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
 export const rand = (rng, a, b) => a + rng() * (b - a);
 export const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
+export const money = (n) => '$' + Math.floor(n).toLocaleString('en-US');
 
 // Road centre lines (both axes). Roads run along x at z = i*block and along z at x = i*block.
 export const roadLines = () => {
@@ -61,4 +67,11 @@ export function nearestIntersection(x, z) {
   let bx = lines[0], bz = lines[0];
   for (const l of lines) { if (Math.abs(x - l) < Math.abs(x - bx)) bx = l; if (Math.abs(z - l) < Math.abs(z - bz)) bz = l; }
   return { x: bx, z: bz };
+}
+
+// Clock label for the HUD: "Hari 2 — 12:00".
+export function clockLabel(day, timeOfDay) {
+  const hh = Math.floor(timeOfDay);
+  const mm = Math.floor((timeOfDay - hh) * 60);
+  return `Hari ${day} — ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }

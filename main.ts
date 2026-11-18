@@ -1,5 +1,7 @@
-// SOLARA BAY — original open-world crime sandbox built in this session (see game/src/*).
+// SOLARA BAY — original open-world crime sandbox, REBUILD entry (Nov 2026).
 // Dax Rivers returns home to take Solara Bay back from the Kessler family.
+// 10 story missions, police helicopter, 3 radio stations, shops, safehouse,
+// garage upgrades — see game/src/* for the game itself.
 // The program below hands the game in: it copies game/ and screenshots/ to /output
 // and writes /output/dossier.json with the vendored make.fun library.
 // Run it with: mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts

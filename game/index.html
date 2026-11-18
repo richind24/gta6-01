@@ -13,8 +13,12 @@
   #hud-money { font-size: 30px; font-weight: 800; color: #7dff8a; }
   #hud-stars { font-size: 26px; letter-spacing: 3px; margin-top: 2px; }
   #hud-clock { font-size: 14px; opacity: .9; margin-top: 4px; }
+  #hud-radio { font-size: 14px; font-weight: 700; color: #ffd21f; margin-top: 4px; }
   #hud-top-left { top: 14px; left: 16px; max-width: 430px; }
   #hud-objective { font-size: 16px; font-weight: 600; background: rgba(0,0,0,.45); padding: 8px 12px; border-radius: 8px; border-left: 4px solid #ffd21f; }
+  #hud-story { font-size: 14px; font-weight: 700; margin-top: 8px; background: rgba(0,0,0,.45); padding: 6px 10px; border-radius: 8px; display: inline-block; }
+  #hud-heli { font-size: 15px; font-weight: 800; color: #ff4d4d; margin-top: 8px; background: rgba(0,0,0,.55); padding: 6px 10px; border-radius: 8px; display: none; animation: heliBlink 0.9s steps(2) infinite; }
+  @keyframes heliBlink { 50% { opacity: 0.45; } }
   #hud-flash { margin-top: 10px; font-size: 15px; font-weight: 700; color: #ffd21f; opacity: 0; transition: opacity .3s; }
   #hud-bottom-left { left: 16px; bottom: 16px; }
   #minimap { width: 190px; height: 190px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); box-shadow: 0 2px 12px rgba(0,0,0,.6); }
@@ -54,9 +58,12 @@
   <div id="hud-money">$250</div>
   <div id="hud-stars">☆☆☆☆☆</div>
   <div id="hud-clock">Hari 1 — 10:00</div>
+  <div id="hud-radio">♪ Bayview FM 101.1 — Solara Nights</div>
 </div>
 <div class="hud" id="hud-top-left">
   <div id="hud-objective">▸ Pergi ke The Rusty Anchor untuk memulai cerita.</div>
+  <div id="hud-story">Cerita 0/10</div>
+  <div id="hud-heli"></div>
   <div id="hud-flash"></div>
 </div>
 <div class="hud" id="hud-bottom-left"><canvas id="minimap" width="190" height="190"></canvas></div>
@@ -76,7 +83,7 @@
 </div>
 
 <div id="shop">
-  <h2>Ironworks Arms — Toko Senjata</h2>
+  <h2 id="shop-title">Ironworks Arms — Toko Senjata</h2>
   <div id="shop-list"></div>
   <button id="shop-close">Tutup (Esc)</button>
 </div>

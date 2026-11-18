@@ -1,10 +1,13 @@
 // HUD: DOM overlay — money, wanted stars, health, speed, clock, objective,
 // minimap canvas, mission cards, menus (start / pause / shop / busted / wasted).
+// Rebuild (Nov 2026): a DENSER HUD — radio station + now-playing, story progress
+// (x/10), a helicopter warning line, and a generic shop panel that serves the
+// gun shop, the diner and Solara Auto from one code path.
 
-import { CITY, roadLines } from './config.js';
+import { CITY, roadLines, clockLabel, money, STORY_TOTAL } from './config.js';
 import { LANDMARKS } from './world.js';
 import { WEAPONS } from './combat.js';
-import { PROPERTIES, SHOP_ITEMS } from './economy.js';
+import { PROPERTIES, SHOP_ITEMS, SHOPS } from './economy.js';
 
 export function createHud(G) {
   const el = (id) => document.getElementById(id);
@@ -16,7 +19,8 @@ export function createHud(G) {
     minimap: el('minimap'), damage: el('damage-flash'),
     menu: el('menu'), menuTitle: el('menu-title'), menuText: el('menu-text'),
     menuButtons: el('menu-buttons'), shop: el('shop'), shopList: el('shop-list'),
-    crosshair: el('crosshair'),
+    shopTitle: el('shop-title'), crosshair: el('crosshair'),
+    radio: el('hud-radio'), story: el('hud-story'), heliWarn: el('hud-heli'),
     flashTimer: 0, cardTimer: 0,
     minimapCtx: el('minimap').getContext('2d'),
 
@@ -50,13 +54,16 @@ export function createHud(G) {
       H.menu.style.display = 'flex';
     },
     hideMenu() { H.menu.style.display = 'none'; },
-    showShop() {
+    // Generic shop panel: any SHOPS entry (gun shop, diner, auto) renders here.
+    showShop(shopDef) {
+      const def = shopDef || SHOPS[0];
+      H.shopTitle.textContent = def.name;
       H.shopList.innerHTML = '';
-      for (const item of SHOP_ITEMS) {
+      for (const item of def.items) {
         const row = document.createElement('div');
         row.className = 'shop-row';
-        const owned = item.id === 'pistol' && G.player.weaponsOwned.includes('pistol');
-        row.innerHTML = `<span>${item.name}</span><span>$${item.price}</span>`;
+        const owned = item.owned ? item.owned(G) : false;
+        row.innerHTML = `<span>${item.name}</span><span>${money(item.price)}</span>`;
         const btn = document.createElement('button');
         btn.textContent = owned ? 'Dimiliki' : 'Beli';
         btn.disabled = owned || G.player.money < item.price;
@@ -66,7 +73,7 @@ export function createHud(G) {
           item.apply(G);
           G.audio.missionDone();
           H.flash(`${item.name} dibeli.`);
-          H.showShop();
+          H.showShop(def);
           G.saveGame();
         };
         row.appendChild(btn);
@@ -79,16 +86,27 @@ export function createHud(G) {
     update(dt) {
       if (H.flashTimer > 0) { H.flashTimer -= dt; if (H.flashTimer <= 0) H.flashEl.style.opacity = '0'; }
       if (H.cardTimer > 0) { H.cardTimer -= dt; if (H.cardTimer <= 0) H.card.style.opacity = '0'; }
-      H.money.textContent = '$' + Math.floor(G.player.money).toLocaleString('en-US');
+      H.money.textContent = money(G.player.money);
       let stars = '';
       for (let i = 0; i < 5; i++) stars += i < G.wanted ? '★' : '☆';
       H.stars.textContent = stars;
       H.stars.style.color = G.wanted > 0 ? '#ffcf3c' : 'rgba(255,255,255,0.35)';
       H.health.style.width = Math.max(0, G.player.health) + '%';
       H.healthText.textContent = 'HP ' + Math.ceil(Math.max(0, G.player.health));
-      const hh = Math.floor(G.weather.timeOfDay);
-      const mm = Math.floor((G.weather.timeOfDay - hh) * 60);
-      H.clock.textContent = `Hari ${G.weather.day} — ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}${G.weather.raining ? ' ☂' : ''}`;
+      H.clock.textContent = clockLabel(G.weather.day, G.weather.timeOfDay) + (G.weather.raining ? ' ☂' : '');
+      // radio + story progress (dense HUD, always visible)
+      if (H.radio && G.radio) H.radio.textContent = G.radio.label();
+      if (H.story) {
+        const done = G.missions ? G.missions.storyIndex : 0;
+        const active = G.missions && G.missions.active ? ` • ${G.missions.active.def.name}` : '';
+        H.story.textContent = `Cerita ${Math.min(done, STORY_TOTAL)}/${STORY_TOTAL}${active}`;
+      }
+      // helicopter warning
+      if (H.heliWarn) {
+        const heliOn = G.heli && G.heli.active;
+        H.heliWarn.style.display = heliOn ? 'block' : 'none';
+        if (heliOn) H.heliWarn.textContent = '🚁 HELIKOPTER POLISI DI ATASMU';
+      }
       if (G.inCar && G.playerCar) {
         H.speed.style.display = 'block';
         H.speed.textContent = Math.round(Math.abs(G.playerCar.speed) * 3.6) + ' km/h';
@@ -110,7 +128,7 @@ export function createHud(G) {
       ctx.beginPath(); ctx.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); ctx.clip();
       const toMap = (x, z) => [S / 2 + ((x - px) / R) * (S / 2), S / 2 + ((z - pz) / R) * (S / 2)];
       // water
-      ctx.fillStyle = '#1d5f7a';
+      ctx.fillStyle = '#2a7fa8';
       const [wx0, wy0] = toMap(-CITY.half - 40, CITY.waterAt);
       ctx.fillRect(0, wy0, S, S);
       // roads
@@ -122,7 +140,7 @@ export function createHud(G) {
         ctx.beginPath(); ctx.moveTo(a1, b1); ctx.lineTo(a2, b2); ctx.stroke();
       }
       // park
-      ctx.fillStyle = '#4d7a3d';
+      ctx.fillStyle = '#5d8a46';
       const [pkx, pky] = toMap(-32, -32);
       ctx.fillRect(pkx, pky, 64 / R * S / 2, 64 / R * S / 2);
       // landmarks
@@ -134,6 +152,10 @@ export function createHud(G) {
       };
       blip(LANDMARKS.bar.x, LANDMARKS.bar.z, '#ff5a3c', 5);
       blip(LANDMARKS.gunshop.x, LANDMARKS.gunshop.z, '#ffc93c');
+      blip(LANDMARKS.diner.x, LANDMARKS.diner.z, '#ff8c42');
+      blip(LANDMARKS.auto.x, LANDMARKS.auto.z, '#9b59b6');
+      blip(LANDMARKS.radio.x, LANDMARKS.radio.z, '#e84393');
+      blip(LANDMARKS.mansion.x, LANDMARKS.mansion.z, '#c0392b');
       for (const p of PROPERTIES) if (!p.owned) blip(p.at.x, p.at.z, '#3cc95f');
       // mission marker
       if (G.missions && G.missions.marker && G.missions.marker.visible) {
@@ -142,8 +164,11 @@ export function createHud(G) {
         ctx.fillStyle = '#ffd21f';
         ctx.beginPath(); ctx.moveTo(bx, by - 8); ctx.lineTo(bx + 6, by + 5); ctx.lineTo(bx - 6, by + 5); ctx.closePath(); ctx.fill();
       }
-      // police
+      // police + helicopter
       for (const c of G.policeCars) blip(c.x, c.z, '#3c6cff', 3);
+      if (G.heli && G.heli.active && G.heli.model) {
+        blip(G.heli.model.position.x, G.heli.model.position.z, '#ff2020', 6);
+      }
       // player arrow
       const heading = G.inCar ? G.playerCar.heading : G.player.heading;
       ctx.save();

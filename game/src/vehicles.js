@@ -1,17 +1,22 @@
 // Vehicles: low-poly car models, traffic AI on the road grid, arcade driving physics.
+// Rebuild (Nov 2026): two new car types (Falcon sports, Bison muscle — 8 types
+// plus taxi), denser traffic (22 moving + 12 parked), and garage upgrades:
+// Turbo Kit raises top speed, Armor Plating raises car health.
 
 import { CITY, roadLines, clamp, lerp, rand, pick, nearestIntersection, onRoad } from './config.js';
 import { collideCircle } from './world.js';
 import { damagePlayer } from './player.js';
 
-const CAR_COLORS = [0xc0392b, 0x2471a3, 0x1e8449, 0xd4ac0d, 0x7d3c98, 0xe67e22, 0x95a5a6, 0x2c3e50, 0xf5f5f5, 0x922b21, 0x148f77, 0xb03a2e];
-const CAR_TYPES = [
+const CAR_COLORS = [0xc0392b, 0x2471a3, 0x1e8449, 0xd4ac0d, 0x7d3c98, 0xe67e22, 0x95a5a6, 0x2c3e50, 0xf5f5f5, 0x922b21, 0x148f77, 0xb03a2e, 0xff6b9d, 0x00b8a9];
+export const CAR_TYPES = [
   { name: 'Civic', w: 1.9, l: 4.2, top: 34, accel: 16, grip: 1.0 },
   { name: 'Sedan', w: 2.0, l: 4.6, top: 30, accel: 13, grip: 1.0 },
   { name: 'Coupe', w: 1.9, l: 4.3, top: 40, accel: 19, grip: 1.1 },
   { name: 'Pickup', w: 2.1, l: 5.0, top: 28, accel: 12, grip: 0.9 },
   { name: 'Van', w: 2.1, l: 5.2, top: 26, accel: 10, grip: 0.85 },
   { name: 'Taxi', w: 1.9, l: 4.4, top: 32, accel: 14, grip: 1.0, taxi: true },
+  { name: 'Falcon', w: 1.85, l: 4.1, top: 46, accel: 23, grip: 1.25 }, // sports car
+  { name: 'Bison', w: 2.15, l: 4.9, top: 36, accel: 15, grip: 0.95 },  // muscle car
 ];
 const POLICE_COLOR = 0x1a1a2e;
 
@@ -25,6 +30,11 @@ export function makeCarModel(G, color, type, isPolice) {
   cabin.position.set(0, 1.2, -type.l * 0.05); cabin.castShadow = true; grp.add(cabin);
   const nose = new THREE.Mesh(new THREE.BoxGeometry(type.w * 0.94, 0.28, 0.5), bodyMat);
   nose.position.set(0, 0.55, type.l / 2 - 0.1); grp.add(nose);
+  // sports spoiler for the Falcon
+  if (type.name === 'Falcon') {
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(type.w * 0.9, 0.08, 0.35), darkMat);
+    wing.position.set(0, 1.15, -type.l / 2 + 0.25); grp.add(wing);
+  }
   // headlights / taillights
   const hl = new THREE.MeshBasicMaterial({ color: 0xfff6c9 });
   const tl = new THREE.MeshBasicMaterial({ color: 0xff2a1a });
@@ -66,7 +76,7 @@ export function spawnCar(G, x, z, heading, opts = {}) {
   const model = makeCarModel(G, color, type, !!opts.police);
   const car = {
     model, type, color, police: !!opts.police, npc: opts.npc !== false,
-    x, z, heading, speed: 0, steer: 0, health: 100,
+    x, z, heading, speed: 0, steer: 0, health: 100, maxHealth: 100,
     target: null, wait: 0, driver: opts.driver !== false,
     siren: 0, stuck: 0,
   };
@@ -127,10 +137,6 @@ export function updateTraffic(G, dt) {
     car.heading += turn * clamp(car.speed / 8, 0, 1) * dt * 1.9;
     car.x += Math.sin(car.heading) * car.speed * dt;
     car.z += Math.cos(car.heading) * car.speed * dt;
-    // keep on the right side of the road
-    const side = 3.2;
-    const rx = Math.cos(car.heading), rz = -Math.sin(car.heading);
-    car.x += rx * 0; // (lane offset applied at spawn; grid driving keeps it near centre)
     const p = collideCircle(G, car.x, car.z, 2.2);
     car.x = p.x; car.z = p.z;
     car.model.position.set(car.x, 0, car.z);
@@ -143,12 +149,14 @@ export function updateTraffic(G, dt) {
 export function drivePlayerCar(G, dt) {
   const car = G.playerCar;
   const inp = G.input;
+  const turbo = G.player.upgrades && G.player.upgrades.turbo ? 1.25 : 1;
+  const top = car.type.top * turbo;
   const fwd = (inp.up ? 1 : 0) - (inp.down ? 0.75 : 0);
   const steerIn = (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
   car.speed += fwd * car.type.accel * dt;
   car.speed -= car.speed * 0.55 * dt; // drag
   if (!fwd) car.speed = lerp(car.speed, 0, clamp(dt * 0.8, 0, 1));
-  car.speed = clamp(car.speed, -12, car.type.top);
+  car.speed = clamp(car.speed, -12, top);
   const steerTarget = steerIn * 0.55 * clamp(Math.abs(car.speed) / 10, 0.15, 1) * (car.speed >= 0 ? 1 : -1);
   car.steer = lerp(car.steer, steerTarget, clamp(dt * 6, 0, 1));
   car.heading += car.steer * clamp(Math.abs(car.speed) / 8, 0, 1.4) * dt * 1.6;
@@ -180,14 +188,14 @@ export function drivePlayerCar(G, dt) {
     w.rotation.x += car.speed * dt * 2.4;
     w.rotation.y = car.steer * 0.5;
   }
-  G.audio.engine(Math.abs(car.speed) / car.type.top, car.speed);
+  G.audio.engine(Math.abs(car.speed) / top, car.speed);
 }
 
 // Spawn ambient traffic + parked cars.
 export function spawnTraffic(G) {
   const rng = G.rng;
   const lines = roadLines();
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 22; i++) {
     const along = pick(rng, lines);
     const cross = rand(rng, -CITY.half + 20, CITY.half - 20);
     const horizontal = rng() < 0.5;
@@ -199,7 +207,7 @@ export function spawnTraffic(G) {
     pickNextTarget(G, car);
   }
   // parked cars along curbs
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 12; i++) {
     const along = pick(rng, lines);
     const cross = rand(rng, -CITY.half + 20, CITY.half - 20);
     const horizontal = rng() < 0.5;

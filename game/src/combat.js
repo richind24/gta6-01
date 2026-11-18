@@ -1,4 +1,7 @@
-// Combat: fists, pistol, SMG and shotgun. Raycast shooting, enemy goons, tracers.
+// Combat: fists, pistol, SMG, shotgun and rifle. Raycast shooting, enemy goons, tracers.
+// Rebuild (Nov 2026): a fifth weapon — the Rifle (long range, heavy damage,
+// sold at Ironworks Arms) — and car wrecks now respect the armor-plated
+// maxHealth set by Solara Auto upgrades.
 
 import { clamp, dist2d } from './config.js';
 import { makePersonModel, animateWalk, scarePeds } from './people.js';
@@ -9,7 +12,9 @@ export const WEAPONS = {
   pistol: { name: 'Pistol', damage: 26, rate: 0.32, range: 55, auto: false, spread: 0.012 },
   smg: { name: 'SMG', damage: 15, rate: 0.09, range: 48, auto: true, spread: 0.045 },
   shotgun: { name: 'Shotgun', damage: 14, rate: 0.9, range: 22, auto: false, spread: 0.09, pellets: 7 },
+  rifle: { name: 'Rifle', damage: 45, rate: 0.8, range: 90, auto: false, spread: 0.006 },
 };
+export const WEAPON_ORDER = ['fists', 'pistol', 'smg', 'shotgun', 'rifle'];
 
 export function tryShoot(G) {
   const p = G.player;

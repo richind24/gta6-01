@@ -1,4 +1,6 @@
 // Input: keyboard state, mouse orbit (drag), click-to-shoot, wheel zoom.
+// Rebuild (Nov 2026): R (radio) and Digit5 (rifle) join the prevent-default
+// list so the browser never steals those keys mid-game.
 
 export function createInput(G) {
   const input = {
@@ -14,7 +16,7 @@ export function createInput(G) {
   window.addEventListener('keydown', (e) => {
     if (keyMap[e.code] !== undefined) { input[keyMap[e.code]] = true; e.preventDefault(); }
     if (!e.repeat) input.pressed[e.code] = true;
-    if (['Space', 'KeyE', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyM', 'Escape', 'Enter'].includes(e.code)) e.preventDefault();
+    if (['Space', 'KeyE', 'KeyR', 'KeyM', 'Escape', 'Enter', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].includes(e.code)) e.preventDefault();
   });
   window.addEventListener('keyup', (e) => {
     if (keyMap[e.code] !== undefined) input[keyMap[e.code]] = false;

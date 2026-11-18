@@ -1,4 +1,7 @@
 // Weather & time: day/night cycle, sun + sky + fog, rain, street-light glow.
+// Rebuild (Nov 2026): noon is now BRIGHT and saturated on purpose — the cover
+// frame is shot at 12:00, so midday sun intensity, sky blue and hemisphere
+// light were all pushed up from the old muted values.
 
 import { clamp, lerp, DAY_LENGTH } from './config.js';
 
@@ -7,9 +10,9 @@ function skyColor(t) {
   const stops = [
     [0.00, 0x0b1026, 0x0b1026, 0x223044, 0.05],
     [0.22, 0x2c3e55, 0x2c3e55, 0x8a6a4a, 0.25],
-    [0.30, 0x87b5d6, 0x9db8c4, 0xffd9a0, 0.9],
-    [0.50, 0x7ec0ee, 0xa8c8d8, 0xfff2cc, 1.15],
-    [0.70, 0x87b5d6, 0x9db8c4, 0xffd9a0, 0.9],
+    [0.30, 0x7fb8e8, 0x9dc8dc, 0xffd9a0, 0.95],
+    [0.50, 0x4aa8e8, 0x9fd0e8, 0xfff6d8, 1.35], // noon: saturated blue sky, hard sun
+    [0.70, 0x7fb8e8, 0x9dc8dc, 0xffd9a0, 0.95],
     [0.78, 0xe8956a, 0xc98a6a, 0xff7a3c, 0.55],
     [0.84, 0x1c2440, 0x1c2440, 0x3a4a6a, 0.12],
     [1.00, 0x0b1026, 0x0b1026, 0x223044, 0.05],
@@ -30,7 +33,7 @@ function skyColor(t) {
 }
 
 export function createWeather(G) {
-  const sun = new THREE.DirectionalLight(0xfff2cc, 1.0);
+  const sun = new THREE.DirectionalLight(0xfff6d8, 1.2);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -90; sun.shadow.camera.right = 90;
@@ -39,9 +42,9 @@ export function createWeather(G) {
   sun.shadow.bias = -0.0008;
   G.scene.add(sun);
   G.scene.add(sun.target);
-  const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x3a4a3a, 0.55);
+  const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x4a5a44, 0.75);
   G.scene.add(hemi);
-  G.scene.fog = new THREE.Fog(0xa8c8d8, 180, 700);
+  G.scene.fog = new THREE.Fog(0x9fd0e8, 180, 700);
 
   // rain: a Points cloud that follows the player
   const rainGeo = new THREE.BufferGeometry();
@@ -86,7 +89,7 @@ export function updateWeather(G, dt) {
   w.sun.target.updateMatrixWorld();
   w.sun.color.copy(sunCol);
   w.sun.intensity = sunI;
-  w.hemi.intensity = 0.42 + sunI * 0.32;
+  w.hemi.intensity = 0.55 + sunI * 0.38;
   const night = clamp(1 - sunI, 0, 1);
   w.night = night;
   // building windows glow at night
@@ -95,6 +98,8 @@ export function updateWeather(G, dt) {
     s.glow.material.opacity = night * 0.5;
     s.bulb.material.color.setHex(night > 0.4 ? 0xffe9a8 : 0x666666);
   }
+  // radio tower beacon blinks
+  if (G.radioBeacon) G.radioBeacon.material.color.setHex(Math.sin(G.time * 3) > 0 ? 0xff2020 : 0x550000);
   // rain scheduling
   w.rainTimer -= dt;
   if (w.rainTimer <= 0) {
@@ -116,9 +121,9 @@ export function updateWeather(G, dt) {
   } else {
     G.scene.fog.near = 180; G.scene.fog.far = 700;
   }
-  // water shimmer
+  // water shimmer: turquoise by day, dark at night
   if (G.waterMat) {
-    G.waterMat.color.setHex(night > 0.5 ? 0x0d3247 : 0x1d5f7a);
+    G.waterMat.color.setHex(night > 0.5 ? 0x0d3247 : 0x2a7fa8);
   }
 }
 
@@ -128,4 +133,11 @@ function collectIncomeSafe(G) {
 
 export function setTimeOfDay(G, hours) {
   G.weather.timeOfDay = hours;
+}
+
+// Midday check used by screenshots: keep the cover frame out of rain and dusk.
+export function forceNoon(G) {
+  setTimeOfDay(G, 12);
+  G.weather.raining = false;
+  G.weather.rainTimer = 600;
 }

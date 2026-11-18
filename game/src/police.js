@@ -1,9 +1,12 @@
 // Wanted system + Solara PD: police cars and foot cops chase, ram and arrest.
+// Rebuild (Nov 2026): the helicopter is wired in here — wanted 3+ calls the
+// air unit (heli.js), and clearing the heat stands it down.
 
-import { clamp, lerp, rand, pick } from './config.js';
+import { clamp, lerp, rand, pick, HELI_WANTED } from './config.js';
 import { spawnCar } from './vehicles.js';
 import { makePersonModel, animateWalk } from './people.js';
 import { collideCircle } from './world.js';
+import { updateHeli } from './heli.js';
 
 const POLICE_TYPES = [
   { name: 'Interceptor', w: 2.0, l: 4.6, top: 42, accel: 22, grip: 1.1 },
@@ -75,6 +78,9 @@ export function updatePolice(G, dt) {
     }
     if (G.recentCrime) { G.recentCrime -= dt; if (G.recentCrime < 0) G.recentCrime = 0; }
   }
+
+  // air unit: heli orbits and fires while the heat is 3+
+  if (G.heli) updateHeli(G, dt);
 
   const tx = G.inCar ? G.playerCar.x : G.player.x;
   const tz = G.inCar ? G.playerCar.z : G.player.z;
@@ -156,4 +162,6 @@ export function clearPolice(G) {
   G.cops.length = 0;
   G.wanted = 0;
   G.wantedTimer = 0;
+  // heli stands down with the heat (its own update removes it once wanted < 3)
+  if (G.heli && G.heli.active) G.heli.leaving = true;
 }

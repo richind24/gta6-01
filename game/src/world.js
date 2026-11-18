@@ -1,5 +1,8 @@
 // Solara Bay city generation: ground, bay water, buildings, props and landmarks.
 // Colliders are axis-aligned boxes the player and cars resolve against.
+// Rebuild (Nov 2026): five new landmarks — diner, auto shop, safehouse apartment,
+// radio tower and the Kessler mansion — plus a police helipad and a livelier
+// beach strip so the noon cover frame is dense, not empty.
 
 import { CITY, roadLines, clamp, rand, pick, mulberry32 } from './config.js';
 import { buildingTexture, groundTexture, glowTexture } from './textures.js';
@@ -9,9 +12,14 @@ export const LANDMARKS = {
   gunshop: { x: 128, z: -64, name: 'Ironworks Arms' },   // weapon shop
   garage: { x: -128, z: -128, name: 'Harbor Garage' },   // buyable property 1
   marina: { x: 192, z: -256, name: 'Solara Marina' },    // buyable property 2
-  police: { x: 64, z: 64, name: 'Solara PD HQ' },        // busted respawn
+  police: { x: 64, z: 64, name: 'Solara PD HQ' },        // busted respawn + helipad
   hospital: { x: -192, z: 64, name: 'Bayview General' }, // wasted respawn
   harbor: { x: 0, z: -272, name: 'Port Solara' },        // story finale area
+  diner: { x: -128, z: 64, name: 'Bayview Diner' },      // food shop: heals
+  auto: { x: 192, z: 128, name: 'Solara Auto' },         // car shop: repair + upgrades
+  apartment: { x: -192, z: -64, name: 'Bayview Apartment' }, // safehouse property 3
+  radio: { x: 64, z: 192, name: 'Bayview Radio' },       // pirate radio tower
+  mansion: { x: 192, z: -192, name: 'Kessler Mansion' }, // story finale: take the house
 };
 
 export function buildCity(G) {
@@ -30,7 +38,7 @@ export function buildCity(G) {
   scene.add(ground);
 
   // ---- bay water (south edge) ----
-  const waterMat = new THREE.MeshLambertMaterial({ color: 0x1d5f7a, transparent: true, opacity: 0.92 });
+  const waterMat = new THREE.MeshLambertMaterial({ color: 0x2a7fa8, transparent: true, opacity: 0.92 });
   const water = new THREE.Mesh(new THREE.PlaneGeometry((CITY.half + 40) * 2, 120), waterMat);
   water.rotation.x = -Math.PI / 2;
   water.position.set(0, 0.15, CITY.waterAt - 52);
@@ -116,6 +124,47 @@ export function buildCity(G) {
   landmark(LANDMARKS.marina, 24, 18, 12, 0x3ca7c9);
   landmark(LANDMARKS.police, 24, 20, 26, 0x3c6cff);
   landmark(LANDMARKS.hospital, 28, 20, 30, 0xffffff);
+  landmark(LANDMARKS.diner, 20, 16, 11, 0xff8c42);
+  landmark(LANDMARKS.auto, 26, 20, 9, 0x9b59b6);
+  landmark(LANDMARKS.apartment, 24, 18, 34, 0x2ecc71);
+  landmark(LANDMARKS.mansion, 30, 24, 18, 0xc0392b);
+
+  // radio tower: tall mast + blinking beacon on its own pad
+  {
+    const lm = LANDMARKS.radio;
+    const mastMat = new THREE.MeshLambertMaterial({ color: 0x8a8f98 });
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.4, 46, 8), mastMat);
+    mast.position.set(lm.x, 23, lm.z);
+    mast.castShadow = true;
+    scene.add(mast);
+    const dish = new THREE.Mesh(new THREE.SphereGeometry(2.2, 10, 8), new THREE.MeshLambertMaterial({ color: 0xdfe6ee }));
+    dish.position.set(lm.x, 40, lm.z);
+    scene.add(dish);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2020 }));
+    beacon.position.set(lm.x, 46.5, lm.z);
+    scene.add(beacon);
+    G.radioBeacon = beacon;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(10, 3, 10), new THREE.MeshLambertMaterial({ color: 0x5d6d7e }));
+    base.position.set(lm.x, 1.5, lm.z);
+    base.castShadow = true;
+    scene.add(base);
+    G.colliders.push({ minX: lm.x - 5, maxX: lm.x + 5, minZ: lm.z - 5, maxZ: lm.z + 5, h: 3 });
+  }
+
+  // police helipad: painted circle on the PD roof apron, next to HQ
+  {
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 0.4, 24),
+      new THREE.MeshLambertMaterial({ color: 0x2c3e50 }));
+    pad.position.set(LANDMARKS.police.x + 26, 0.2, LANDMARKS.police.z);
+    pad.receiveShadow = true;
+    scene.add(pad);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(6.5, 8.4, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffd21f, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(LANDMARKS.police.x + 26, 0.45, LANDMARKS.police.z);
+    scene.add(ring);
+    G.helipad = { x: LANDMARKS.police.x + 26, z: LANDMARKS.police.z };
+  }
 
   // ---- park: trees, pond, benches ----
   const treeTrunk = new THREE.MeshLambertMaterial({ color: 0x5d4126 });
@@ -131,6 +180,26 @@ export function buildCity(G) {
   }
   const pond = new THREE.Mesh(new THREE.CircleGeometry(11, 24), new THREE.MeshLambertMaterial({ color: 0x2a6f8f }));
   pond.rotation.x = -Math.PI / 2; pond.position.set(0, 0.2, 0); scene.add(pond);
+
+  // ---- beach: umbrellas + towels along the sand so noon shots feel alive ----
+  const umbrellaColors = [0xff5a3c, 0xffd21f, 0x3ca7c9, 0xe84393, 0x2ecc71];
+  for (let u = 0; u < 10; u++) {
+    const x = -240 + u * 52 + rand(rng, -8, 8);
+    const z = CITY.waterAt + 14 + rand(rng, 0, 14);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 3, 6),
+      new THREE.MeshLambertMaterial({ color: 0xf5f5f5 }));
+    pole.position.set(x, 1.5, z);
+    scene.add(pole);
+    const top = new THREE.Mesh(new THREE.ConeGeometry(2.6, 1.1, 8),
+      new THREE.MeshLambertMaterial({ color: umbrellaColors[u % umbrellaColors.length] }));
+    top.position.set(x, 3.4, z);
+    top.castShadow = true;
+    scene.add(top);
+    const towel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 1.1),
+      new THREE.MeshLambertMaterial({ color: umbrellaColors[(u + 2) % umbrellaColors.length] }));
+    towel.position.set(x + 3, 0.2, z + 2);
+    scene.add(towel);
+  }
 
   // ---- street lights at intersections ----
   const poleMat = new THREE.MeshLambertMaterial({ color: 0x2c2c2c });
@@ -195,4 +264,10 @@ export function collideCircle(G, x, z, r) {
     }
   }
   return { x: clamp(x, -CITY.half, CITY.half), z: clamp(z, CITY.waterAt + 2, CITY.half) };
+}
+
+// Is a point inside any owned safehouse radius (police lose the trail there)?
+export function insideOwnedProperty(G, x, z, radius = 14) {
+  const { PROPERTIES } = G.economy;
+  return PROPERTIES.some((pr) => pr.owned && Math.hypot(x - pr.at.x, z - pr.at.z) < radius);
 }
