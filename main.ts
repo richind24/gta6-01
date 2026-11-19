@@ -1,13 +1,7 @@
-// Solara Bay — round 4 entry program for the make.fun GTA 6 bounty.
-// Node 22, standard library only. It hands the game in: copy this
-// repository's game/ and screenshots/ into the output directory and write
-// the dossier the judge reads, using the kit's vendored library.
-//
-// Run it locally to check the entry exactly as the grader will see it:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-// Then serve the game itself with `node serve.ts` and open
-// http://localhost:8080 to play it in desktop Chrome.
-
+// Solara Bay — the entry program (Node 22, standard library only).
+// It copies the playable game and the screenshots beside this file into the
+// output directory and writes the dossier the judge reads, using the kit's
+// vendored make.fun library exactly as the kit ships it.
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,12 +13,14 @@ const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+if (existsSync(join(here, 'screenshots'))) {
+  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+}
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes
-// the bytes; the others refuse an entry the scorer would refuse (more than
-// 4 screenshots or one over 256 KiB; more than 993 files in game/ or
-// 48 MiB of game files, in all, or a path under game/ over 1000 bytes).
+// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the
+// bytes; the others refuse an entry the scorer would refuse (more than 4
+// screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of
+// game files in all, or a path under game/ over 1000 bytes).
 writeFileSync(
   join(out, 'dossier.json'),
   buildDossier(out, {

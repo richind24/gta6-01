@@ -1,316 +1,251 @@
-// Solara Bay — missions.js
-// One clear job: the story. Ten chapters plus repeatable side jobs, all
-// driven by one small step engine: goto, pickup, eliminate, chase, race,
-// escape and enterCar. The engine owns the objective beacon, the goons,
-// the chase target and the timers; main.js only feeds it time and input.
-import * as THREE from 'three';
-import { STORY, SIDE_JOBS } from './config.js';
-import { createCarMesh, Car } from './vehicles.js';
+// Solara Bay — the story: 10 story missions plus 2 side jobs, with a small
+// step engine (go to, deliver, collect, survive, escape, chase) and a marker.
+import { PLACES } from './config.js';
 
-function makeBeacon(color) {
-  const mesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(3.2, 3.2, 26, 14, 1, true),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }),
-  );
-  mesh.position.y = 13;
-  return mesh;
+export const STORY_MISSIONS = [
+  {
+    id: 'm1', title: 'Welcome to Solara', giver: 'Marisol',
+    brief: 'You just washed up in Solara Bay with $250 and a borrowed jacket. Marisol runs the cafe on the north-west corner — go say hello and hear the plan.',
+    reward: 300,
+    steps: [{ type: 'goto', place: 'cafe', text: 'Drive or walk to Marisol\'s Cafe' }],
+  },
+  {
+    id: 'm2', title: 'Hot Wheels', giver: 'Marisol',
+    brief: 'The garage needs a Viento GT, and the owner parked one by the beach road. Steal it — the cops will notice — and bring it to the Solara Garage.',
+    reward: 800,
+    steps: [
+      { type: 'steal', carType: 'sport', text: 'Steal a Viento GT (E next to any red sports car)' },
+      { type: 'deliver', place: 'garage', text: 'Deliver the Viento GT to the Solara Garage' },
+    ],
+  },
+  {
+    id: 'm3', title: 'Beach Run', giver: 'Marisol',
+    brief: 'A package for the beach kiosk, and the buyer pays double if you are quick. 75 seconds, no excuses.',
+    reward: 650,
+    steps: [{ type: 'timed', place: 'kiosk', seconds: 75, text: 'Reach the Beach Kiosk before the timer ends' }],
+  },
+  {
+    id: 'm4', title: 'Shakedown', giver: 'Dante',
+    brief: 'Dante runs protection on this side of town. Three shops owe this week: the arms dealer, the hotel and the clinic. Collect from all three.',
+    reward: 1200,
+    steps: [
+      { type: 'collect', place: 'gunshop', text: 'Collect from Ironclad Arms' },
+      { type: 'collect', place: 'hotel', text: 'Collect from the Palmera Hotel' },
+      { type: 'collect', place: 'clinic', text: 'Collect from the Bay Clinic' },
+    ],
+  },
+  {
+    id: 'm5', title: 'Heat Wave', giver: 'Marisol',
+    brief: 'That shakedown made noise. The SBPD is on you — lose them. Break line of sight and stay quiet until the heat dies, or outrun them to the safehouse.',
+    reward: 900,
+    steps: [{ type: 'escape', text: 'Lose the police (get Wanted to 0) or reach the Safehouse' }],
+  },
+  {
+    id: 'm6', title: 'Harbor Lights', giver: 'Dante',
+    brief: 'A crate came in at the marina and it cannot sit there. Pick it up at the docks and run it to the warehouse — by boat if you own one, by road if you do not.',
+    reward: 1400,
+    steps: [
+      { type: 'goto', place: 'marina', text: 'Pick up the crate at the Solara Marina' },
+      { type: 'deliver', place: 'warehouse', text: 'Deliver the crate to the Dock Warehouse' },
+    ],
+  },
+  {
+    id: 'm7', title: 'High Roller', giver: 'Palmera Hotel',
+    brief: 'A VIP needs a quiet ride to Liberty Plaza in the limo by the hotel. One scratch on the paint and the tip is gone — drive smooth.',
+    reward: 1600,
+    steps: [
+      { type: 'steal', carType: 'limo', text: 'Take the Palmera Limo' },
+      { type: 'deliver', place: 'plaza', text: 'Drop the VIP at Liberty Plaza without wrecking the car' },
+    ],
+  },
+  {
+    id: 'm8', title: 'Air Support', giver: 'Marisol',
+    brief: 'The SBPD chopper is up and it does not blink. Survive 90 seconds under the spotlight, then slip into the safehouse and disappear.',
+    reward: 2000,
+    steps: [{ type: 'survive', seconds: 90, text: 'Survive the helicopter for 90 seconds, then reach the Safehouse' }],
+  },
+  {
+    id: 'm9', title: 'The Big One', giver: 'Dante',
+    brief: 'The Solara Bank, noon, one crew: you. Grab the cash, get out with five stars on your tail and make the safehouse. This is the job the whole town will remember.',
+    reward: 5000,
+    steps: [
+      { type: 'goto', place: 'bank', text: 'Hit the Solara Bank and grab the cash' },
+      { type: 'escape', text: 'Escape to the Safehouse with the cash' },
+    ],
+  },
+  {
+    id: 'm10', title: 'King of Solara', giver: 'Marisol',
+    brief: 'Rival crew boss Kessler is running one last package to the docks. Intercept his car, take the package, and deliver it to the cafe. Do this and Solara Bay is yours.',
+    reward: 8000,
+    steps: [
+      { type: 'chase', text: 'Intercept Kessler\'s car (ram it until it stops)' },
+      { type: 'deliver', place: 'cafe', text: 'Deliver the package to Marisol\'s Cafe' },
+    ],
+  },
+];
+
+export const SIDE_MISSIONS = [
+  {
+    id: 's1', title: 'Taxi Fare', giver: 'Bay Taxi Co.',
+    brief: 'The taxi by the hotel needs a driver for the afternoon. Three fares, three stops, tips if you are fast.',
+    reward: 700,
+    steps: [
+      { type: 'collect', place: 'hotel', text: 'Fare 1: pick up at the Palmera Hotel' },
+      { type: 'collect', place: 'plaza', text: 'Fare 2: pick up at Liberty Plaza' },
+      { type: 'collect', place: 'kiosk', text: 'Fare 3: pick up at the Beach Kiosk' },
+    ],
+  },
+  {
+    id: 's2', title: 'Street Racer', giver: 'Sunset Strip',
+    brief: 'Midnight racers run the strip at noon for the hell of it. Three checkpoints, 60 seconds, winner takes the pot.',
+    reward: 1000,
+    steps: [
+      { type: 'timed', place: 'racetrack', seconds: 60, text: 'Checkpoint 1: Sunset Strip' },
+      { type: 'timed', place: 'kiosk', seconds: 60, text: 'Checkpoint 2: Beach Kiosk' },
+      { type: 'timed', place: 'plaza', seconds: 60, text: 'Checkpoint 3: Liberty Plaza' },
+    ],
+  },
+];
+
+function stepTarget(step) {
+  if (step.place) return PLACES[step.place];
+  return null;
 }
 
-function makeGoonMesh() {
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(1.1, 1.5, 0.6),
-    new THREE.MeshLambertMaterial({ color: 0x222222 }),
-  );
-  body.position.y = 1.15;
-  group.add(body);
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.45, 10, 8),
-    new THREE.MeshLambertMaterial({ color: 0xc98d64 }),
-  );
-  head.position.y = 2.25;
-  group.add(head);
-  return group;
+export function startMission(state, def, audio, isSide = false) {
+  const mission = {
+    def, isSide,
+    stepIndex: 0,
+    timer: def.steps[0].seconds || 0,
+    target: null,
+    chaseCar: null,
+    done: false,
+  };
+  mission.target = stepTarget(def.steps[0]);
+  state.mission = mission;
+  if (audio) audio.pickup();
+  return mission;
 }
 
-export class MissionEngine {
-  constructor(scene, G) {
-    this.scene = scene;
-    this.G = G;
-    this.missionIndex = 0;
-    this.stepIndex = 0;
-    this.active = false;
-    this.timer = 0;
-    this.beacon = makeBeacon(0xffd23f);
-    this.beacon.visible = false;
-    scene.add(this.beacon);
-    this.pickupMarker = makeBeacon(0x35c8ff);
-    this.pickupMarker.visible = false;
-    scene.add(this.pickupMarker);
-    this.chaseTarget = null;
-    this.raceIndex = 0;
-    this.racePoints = [];
-    this.eliminated = 0;
-    this.side = null; // active side-job mission object
+export function currentStep(state) {
+  if (!state.mission) return null;
+  return state.mission.def.steps[state.mission.stepIndex];
+}
+
+export function advanceStep(state, audio) {
+  const m = state.mission;
+  if (!m) return false;
+  m.stepIndex += 1;
+  if (m.stepIndex >= m.def.steps.length) {
+    completeMission(state, audio);
+    return true;
   }
+  const step = m.def.steps[m.stepIndex];
+  m.timer = step.seconds || 0;
+  m.target = stepTarget(step);
+  if (audio) audio.pickup();
+  return false;
+}
 
-  current() {
-    if (this.side) return this.side;
-    if (this.missionIndex >= STORY.length) return null;
-    return STORY[this.missionIndex];
-  }
+export function completeMission(state, audio) {
+  const m = state.mission;
+  if (!m) return;
+  state.money += m.def.reward;
+  state.stats.earned += m.def.reward;
+  state.stats.missions += 1;
+  state.respect += 10;
+  if (m.isSide) state.sideDone.push(m.def.id);
+  else state.missionsDone.push(m.def.id);
+  state.mission = null;
+  state.mode = 'missiondone';
+  if (audio) audio.cash();
+}
 
-  isStoryDone() { return this.missionIndex >= STORY.length; }
+export function failMission(state, audio, reason) {
+  state.mission = null;
+  state.message = reason || 'Mission failed';
+  state.messageTimer = 4;
+  if (audio) audio.fail();
+}
 
-  objectiveText() {
-    const m = this.current();
-    if (!m) return 'Story complete — Solara Bay is yours, Rico.';
-    if (!this.active) return m.brief + '  (Press M to start: ' + m.title + ')';
-    const step = m.steps[this.stepIndex];
-    if (!step) return m.title;
-    let text = step.text || m.title;
-    if (step.type === 'race') text += ' — checkpoint ' + (this.raceIndex + 1) + '/' + step.checkpoints.length;
-    if (step.type === 'eliminate') text += ' — ' + this.eliminated + '/' + step.count + ' down';
-    if (this.timer > 0) text += ' — ' + Math.ceil(this.timer) + 's';
-    return text;
-  }
+// Called every frame while a mission is active. Returns 'done' | 'failed' | null.
+export function updateMission(state, dt, audio) {
+  const m = state.mission;
+  if (!m) return null;
+  const step = m.def.steps[m.stepIndex];
+  const p = state.player;
+  const dist = (t) => (t ? Math.hypot(p.x - t.x, p.z - t.z) : 9999);
 
-  startCurrent() {
-    const m = this.current();
-    if (!m || this.active) return;
-    this.active = true;
-    this.stepIndex = 0;
-    this.timer = 0;
-    this.raceIndex = 0;
-    this.eliminated = 0;
-    this.beginStep();
-    this.G.toast('Mission: ' + m.title + ' — ' + m.giver);
-    this.G.audio.pickup();
-  }
-
-  beginStep() {
-    const m = this.current();
-    if (!m) return;
-    const step = m.steps[this.stepIndex];
-    if (!step) { this.finishMission(); return; }
-    this.timer = step.timer || 0;
-    this.beacon.visible = false;
-    this.pickupMarker.visible = false;
-    if (step.pos) {
-      const isPickup = step.type === 'pickup';
-      const marker = isPickup ? this.pickupMarker : this.beacon;
-      marker.position.set(step.pos[0], isPickup ? 13 : 13, step.pos[1]);
-      marker.visible = true;
-    }
-    if (step.type === 'race') {
-      this.racePoints = step.checkpoints;
-      this.raceIndex = 0;
-      this.beacon.position.set(step.checkpoints[0][0], 13, step.checkpoints[0][1]);
-      this.beacon.visible = true;
-    }
-    if (step.type === 'eliminate') {
-      this.eliminated = 0;
-      this.spawnGoons(step.pos, step.count);
-    }
-    if (step.type === 'chase') this.spawnChaseTarget();
-    if (m.wanted) this.G.police.setWanted(m.wanted);
-  }
-
-  spawnGoons(pos, count) {
-    this.clearGoons();
-    for (let i = 0; i < count; i++) {
-      const mesh = makeGoonMesh();
-      const x = pos[0] + (i - count / 2) * 6 + (Math.random() - 0.5) * 4;
-      const z = pos[1] + (Math.random() - 0.5) * 10;
-      mesh.position.set(x, 0, z);
-      this.scene.add(mesh);
-      this.G.goons.push({ mesh, x, z, hp: 100, dead: false, shootTimer: 1 + Math.random() });
+  if (step.type === 'timed') {
+    m.timer -= dt;
+    if (m.timer <= 0) {
+      failMission(state, audio, 'Out of time — mission failed');
+      return 'failed';
     }
   }
-
-  clearGoons() {
-    for (const goon of this.G.goons) this.scene.remove(goon.mesh);
-    this.G.goons.length = 0;
-  }
-
-  spawnChaseTarget() {
-    if (this.chaseTarget) return;
-    const mesh = createCarMesh(0x9b2226, 'sedan');
-    this.scene.add(mesh);
-    const car = new Car(mesh, 120, 60, 0, 'sedan');
-    car.ai = { speed: 16 };
-    car.health = 100;
-    this.chaseTarget = car;
-    this.G.traffic.push(car);
-  }
-
-  onEnterCar() {
-    const m = this.current();
-    if (!this.active || !m) return;
-    const step = m.steps[this.stepIndex];
-    if (step && step.type === 'enterCar') this.advanceStep();
-  }
-
-  onGoonDown() {
-    const m = this.current();
-    if (!this.active || !m) return;
-    const step = m.steps[this.stepIndex];
-    if (step && step.type === 'eliminate') {
-      this.eliminated += 1;
-      if (this.eliminated >= step.count) this.advanceStep();
+  if (step.type === 'survive') {
+    m.timer -= dt;
+    if (state.wanted < 3) {
+      // No helicopter, no pressure: the clock still runs.
     }
-  }
-
-  // E pressed near an objective: pickups, and taxi fares.
-  onInteract() {
-    const m = this.current();
-    if (!this.active || !m) return false;
-    const step = m.steps[this.stepIndex];
-    if (!step || step.type !== 'pickup' || !step.pos) return false;
-    const p = this.G.player;
-    const px = p.inCar && p.car ? p.car.x : p.x;
-    const pz = p.inCar && p.car ? p.car.z : p.z;
-    if (Math.hypot(step.pos[0] - px, step.pos[1] - pz) < (step.radius || 6)) {
-      this.G.audio.pickup();
-      this.advanceStep();
-      return true;
-    }
-    return false;
-  }
-
-  advanceStep() {
-    this.stepIndex += 1;
-    const m = this.current();
-    if (!m || this.stepIndex >= m.steps.length) this.finishMission();
-    else this.beginStep();
-  }
-
-  finishMission() {
-    const m = this.current();
-    if (!m) return;
-    this.active = false;
-    this.beacon.visible = false;
-    this.pickupMarker.visible = false;
-    this.clearGoons();
-    this.G.cash += m.reward;
-    this.G.respect += 10;
-    this.G.audio.cash();
-    this.G.toast('Mission complete: ' + m.title + '  +$' + m.reward);
-    if (this.side) {
-      this.G.sideDone[this.side.id] = (this.G.sideDone[this.side.id] || 0) + 1;
-      this.side = null;
-    } else {
-      this.missionIndex += 1;
-      if (this.missionIndex >= STORY.length) this.G.onStoryComplete();
-    }
-    this.G.saveNow();
-  }
-
-  failMission(reason) {
-    this.active = false;
-    this.beacon.visible = false;
-    this.pickupMarker.visible = false;
-    this.clearGoons();
-    this.G.toast('Mission failed: ' + reason + ' — press M to retry');
-  }
-
-  startSideJob(id) {
-    if (this.active) { this.G.toast('Finish the current mission first'); return; }
-    const job = SIDE_JOBS.find((j) => j.id === id);
-    if (!job) return;
-    if (id === 'taxi') {
-      this.side = { id, title: 'Taxi Fare', giver: 'Dispatch', reward: 150, steps: [
-        { type: 'goto', pos: [-60, 60], text: 'Pick up the fare at Downtown', radius: 8 },
-        { type: 'goto', pos: [150, -30], text: 'Drop the fare at Ocean Drive', radius: 8 },
-      ] };
-    } else if (id === 'vigilante') {
-      this.side = { id, title: 'Vigilante', giver: 'Solara PD tip line', reward: 350, steps: [
-        { type: 'eliminate', count: 3, pos: [0, 60], text: 'Take down the runners', radius: 24 },
-      ] };
-    } else if (id === 'courier') {
-      this.side = { id, title: 'Courier Run', giver: 'Bay Express', reward: 250, steps: [
-        { type: 'pickup', pos: [-120, -60], text: 'Collect parcel 1 (E)', radius: 6, timer: 60 },
-        { type: 'goto', pos: [120, 120], text: 'Deliver parcel 1', radius: 8 },
-      ] };
-    } else {
-      this.side = { id, title: 'Street Race', giver: 'Midnight Club', reward: 400, steps: [
-        { type: 'race', checkpoints: [[-60, -60], [60, 60], [150, 0]], timer: 45, text: 'Street race' },
-      ] };
-    }
-    this.startCurrent();
-  }
-
-  playerPos() {
-    const p = this.G.player;
-    return p.inCar && p.car ? [p.car.x, p.car.z] : [p.x, p.z];
-  }
-
-  update(dt) {
-    // Goons shoot back when close.
-    for (const goon of this.G.goons) {
-      if (goon.dead) continue;
-      const p = this.G.player;
-      const d = Math.hypot(goon.x - p.x, goon.z - p.z);
-      goon.shootTimer -= dt;
-      if (d < 22 && goon.shootTimer <= 0) {
-        goon.shootTimer = 1.6;
-        goon.mesh.lookAt(p.x, 0, p.z);
-        this.G.damagePlayer(6, 'goon');
-        this.G.tracer(goon.x, goon.z, p.x, p.z);
+    if (m.timer <= 0) {
+      const sh = PLACES.safehouse;
+      if (dist(sh) < 9) {
+        advanceStep(state, audio);
+        return null;
       }
-    }
-    if (!this.active) return;
-    const m = this.current();
-    if (!m) return;
-    const step = m.steps[this.stepIndex];
-    if (!step) return;
-    if (this.timer > 0) {
-      this.timer -= dt;
-      if (this.timer <= 0) { this.failMission('out of time'); return; }
-    }
-    const [px, pz] = this.playerPos();
-    if (step.type === 'goto' && step.pos) {
-      if (Math.hypot(step.pos[0] - px, step.pos[1] - pz) < (step.radius || 8)) this.advanceStep();
-    } else if (step.type === 'escape') {
-      if (this.G.police.wanted === 0 && step.pos && Math.hypot(step.pos[0] - px, step.pos[1] - pz) < (step.radius || 10)) {
-        this.advanceStep();
-      }
-    } else if (step.type === 'race') {
-      const cp = this.racePoints[this.raceIndex];
-      if (cp && Math.hypot(cp[0] - px, cp[1] - pz) < 10) {
-        this.G.audio.pickup();
-        this.raceIndex += 1;
-        if (this.raceIndex >= this.racePoints.length) this.advanceStep();
-        else {
-          const next = this.racePoints[this.raceIndex];
-          this.beacon.position.set(next[0], 13, next[1]);
-        }
-      }
-    } else if (step.type === 'chase') {
-      const target = this.chaseTarget;
-      if (target) {
-        // The courier flees along the marina road.
-        target.heading = Math.sin(this.G.time * 0.4) * 0.5;
-        target.x += Math.cos(target.heading) * 15 * dt;
-        target.z += Math.sin(target.heading) * 15 * dt;
-        if (target.x > 200) target.heading = Math.PI;
-        if (target.x < -200) target.heading = 0;
-        target.syncMesh();
-        // Ramming: player car contact damages the target.
-        const p = this.G.player;
-        if (p.inCar && p.car) {
-          const d = Math.hypot(target.x - p.car.x, target.z - p.car.z);
-          if (d < 5 && Math.abs(p.car.speed) > 6) {
-            target.health -= 30 * dt * 4;
-            p.car.speed *= 0.85;
-            if (target.health <= 0 && !target.stalled) {
-              target.stalled = true;
-              this.G.toast('Courier stopped!');
-              this.advanceStep();
-            }
-          }
-        }
-      }
+      m.timer = 0;
+      m.target = sh;
+      step.text = 'Now reach the Safehouse';
+      return null;
     }
   }
+  if (step.type === 'escape') {
+    if (state.wanted === 0) {
+      advanceStep(state, audio);
+      return null;
+    }
+    const sh = PLACES.safehouse;
+    if (dist(sh) < 9) {
+      state.wanted = 0;
+      state.crimeTimer = 0;
+      advanceStep(state, audio);
+      return null;
+    }
+    m.target = sh;
+    return null;
+  }
+  if (step.type === 'steal') {
+    if (!p.onFoot && p.car && p.car.type === step.carType) {
+      advanceStep(state, audio);
+      return null;
+    }
+    return null;
+  }
+  if (step.type === 'chase') {
+    if (m.chaseCar && m.chaseCar.hp <= 0) {
+      advanceStep(state, audio);
+      return null;
+    }
+    return null;
+  }
+  // goto / deliver / collect / timed: reach the marker.
+  if (m.target && dist(m.target) < 9) {
+    if (step.type === 'goto' && m.def.id === 'm9') {
+      // The bank job: grabbing the cash draws five stars.
+      state.wanted = 5;
+      state.crimeTimer = 0;
+      if (audio) audio.sirenBlip();
+    }
+    advanceStep(state, audio);
+    return null;
+  }
+  return null;
+}
+
+export function nextStoryIndex(state) {
+  for (let i = 0; i < STORY_MISSIONS.length; i++) {
+    if (!state.missionsDone.includes(STORY_MISSIONS[i].id)) return i;
+  }
+  return -1;
 }

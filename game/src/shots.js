@@ -1,84 +1,105 @@
-// Solara Bay — shots.js
-// One clear job: deterministic screenshot setups. The game reads ?shot=
-// from the URL; each name stages a bright noon scene with a dense HUD and
-// something happening, so the cover and the other screenshots are real
-// renders of the same code the player runs. Nothing here edits the game:
-// it only moves the player, the police and the mission state, then flags
-// the frame ready for the screenshot tool.
-import { STORY } from './config.js';
+// Solara Bay — screenshot staging: real gameplay states the cover and the
+// other shots are taken from, driven through the same public game API the
+// player uses. Nothing here is faked: the frames are the game running.
+import { PLACES } from './config.js';
+import { startMission, STORY_MISSIONS } from './missions.js';
 
-function putPlayerInCar(G, carIndex, x, z, heading) {
-  const car = G.parkedCars[carIndex % G.parkedCars.length];
-  car.x = x; car.z = z; car.heading = heading; car.speed = 20;
-  car.syncMesh();
-  G.player.inCar = true;
-  G.player.car = car;
-  G.player.x = x; G.player.z = z;
-  G.player.mesh.visible = false;
-}
+export function setupShots(game) {
+  const { state } = game;
 
-function startMissionAt(G, index) {
-  G.missions.missionIndex = index;
-  G.missions.side = null;
-  G.missions.active = false;
-  G.missions.startCurrent();
-}
-
-export function stageShot(G, name) {
-  G.shotName = name;
-  // Every shot is noon: the sun never moves for the camera.
-  G.clockMinutes = 12 * 60;
-  if (name === 'cover') {
-    // Noon police pursuit: Rico in a red sedan crossing Downtown, 3 stars,
-    // helicopter overhead, patrol cars closing in, mission 2 on the HUD.
-    putPlayerInCar(G, 0, -30, 0, 0);
-    // The cover car reads best in bright red.
-    G.player.car.mesh.children[0].material.color.setHex(0xe63946);
-    G.police.setWanted(3);
-    G.police.ensureHeli(G);
-    // Park the helicopter north of the player at screenshot time
-    // (it drifts 0.55 rad/s, the shot lands ~2.2 s after staging).
-    G.police.heliAngle = 3.5;
-    startMissionAt(G, 1);
-    G.cash = 12450;
-    G.health = 86;
-    G.ammo = 42;
-    G.hasPistol = true;
-    G.cameraPreset = 'chase';
-  } else if (name === 'mission') {
-    // Harbor Lights on foot at the east docks, package beacon live.
-    G.player.x = 168; G.player.z = 40;
-    G.player.mesh.position.set(168, 0, 40);
-    G.hasPistol = true; G.ammo = 60;
-    startMissionAt(G, 1);
-    G.police.setWanted(1);
-    G.cash = 8300;
-    G.cameraPreset = 'close';
-  } else if (name === 'city') {
-    // Downtown drive with traffic and a patrol car in the mirror.
-    putPlayerInCar(G, 2, -30, 0, 0);
-    G.police.setWanted(1);
-    startMissionAt(G, 0);
-    G.cash = 5200;
-    G.cameraPreset = 'chase';
-  } else if (name === 'harbor') {
-    // Marina Bay at noon: the GT by the docks, mission 6 collecting drops.
-    putPlayerInCar(G, G.parkedCars.length - 1, 150, 100, Math.PI / 2);
-    G.player.car.speed = 0;
-    startMissionAt(G, 5);
-    G.police.setWanted(0);
-    G.cash = 21400;
-    G.health = 100;
-    G.cameraPreset = 'wide';
+  function ensureSportAt(x, z, heading) {
+    let car = game.nearestParkedSport();
+    if (!car) car = game.spawnParkedCar('sport', x, z, heading);
+    car.x = x; car.z = z; car.heading = heading;
+    car.mesh.position.set(x, 0, z);
+    car.mesh.rotation.y = heading;
+    return car;
   }
-  G.shotReadyAt = G.time + 1.4;
-}
 
-export function shotTitle(name) {
-  return {
-    cover: 'Noon police pursuit — 3 stars, helicopter, mission active',
-    mission: 'Harbor Lights on foot at the east docks',
-    city: 'Downtown drive with traffic and a patrol car',
-    harbor: 'Marina Bay and the harbour at noon',
-  }[name] || 'Solara Bay';
+  const shots = {
+    cover() {
+      game.clearCinematic();
+      game.setPlaying();
+      // Beach road, heading north: open sky, water on the right, city left.
+      const car = ensureSportAt(160, 40, Math.PI);
+      game.enterCar(car, true);
+      state.wanted = 3;
+      state.crimeTimer = 0;
+      game.spawnPoliceBurst(3);
+      const m = startMission(state, STORY_MISSIONS[4], game.audio);
+      m.target = PLACES.safehouse;
+      state.message = 'HEAT WAVE — lose the SBPD or reach the Safehouse';
+      state.messageTimer = 6;
+    },
+    mission() {
+      game.clearCinematic();
+      game.setPlaying();
+      game.exitCar();
+      game.teleport(-140, -140);
+      state.wanted = 0;
+      startMission(state, STORY_MISSIONS[1], game.audio);
+      // Closer framing so Rae on foot reads clearly.
+      game.setCinematic({ pos: [-165, 42, -92], look: [-140, 0, -140] });
+      state.message = 'HOT WHEELS — steal a Viento GT';
+      state.messageTimer = 6;
+    },
+    city() {
+      game.clearCinematic();
+      game.setPlaying();
+      const car = ensureSportAt(-40, -20, 0);
+      game.enterCar(car, true);
+      state.wanted = 0;
+      startMission(state, STORY_MISSIONS[0], game.audio);
+      game.setCinematic({ pos: [-30, 150, 150], look: [70, 0, -50] });
+      state.message = 'SOLARA BAY — a city to take';
+      state.messageTimer = 6;
+    },
+    harbor() {
+      game.clearCinematic();
+      game.setPlaying();
+      const boat = game.boatCar();
+      game.teleport(188, 130);
+      game.enterCar(boat, true);
+      state.wanted = 0;
+      state.ownBoat = true;
+      startMission(state, STORY_MISSIONS[5], game.audio);
+      // Low camera south of the boat, looking north up the water channel.
+      game.setCinematic({ pos: [196, 35, 192], look: [196, 0, 140] });
+      state.message = 'HARBOR LIGHTS — run the crate to the warehouse';
+      state.messageTimer = 6;
+    },
+  };
+
+  window.__solara = {
+    ready: true,
+    shot(name) {
+      if (!shots[name]) return { ok: false, error: 'unknown shot ' + name };
+      try {
+        shots[name]();
+        return { ok: true, shot: name };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message || e) };
+      }
+    },
+    status() {
+      return {
+        ready: true,
+        mode: state.mode,
+        wanted: state.wanted,
+        mission: state.mission ? state.mission.def.title : null,
+        step: state.mission ? state.mission.def.steps[state.mission.stepIndex].text : null,
+        money: state.money,
+        health: Math.round(state.health),
+        cars: state.cars.length,
+        peds: state.peds.length,
+        police: state.police.length,
+        heli: !!state.heli,
+        player: { x: Math.round(state.player.x), z: Math.round(state.player.z), onFoot: state.player.onFoot },
+        fps: game.fps,
+        time: Math.round(state.time * 10) / 10,
+        errors: state.errors.slice(-5),
+      };
+    },
+  };
+  return window.__solara;
 }

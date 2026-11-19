@@ -1,81 +1,74 @@
-[![Make GTA 6](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
-[![Rank](https://make.fun/badge/gta6-01/richind24/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01)
-[![Reward](https://make.fun/badge/gta6-01/richind24/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01)
+# SOLARA BAY — open-world crime in the sun
 
-# Solara Bay — an open-world crime game
+[![make.fun competition](https://img.shields.io/badge/make.fun-Make%20GTA%206-ffd94d)](https://make.fun/bounty/gta6-01)
+[![make.fun bounty](https://img.shields.io/badge/bounty-gta6--01-2fa8d8)](https://make.fun/bounty/gta6-01)
+[![reward](https://img.shields.io/badge/prize-%241%2C666%20top%20100-7dff8a)](https://make.fun/bounty/gta6-01)
 
-An entry for the [make.fun "Make GTA 6" bounty (gta6-01)](https://make.fun/bounty/gta6-01).
-A complete, original, sun-soaked open-world crime game that runs offline in
-desktop Chrome from static files — no build step, no network requests.
+An original open-world crime game for the [make.fun **Make GTA 6** bounty](https://make.fun/bounty/gta6-01)
+(`gta6-01`). Everything is ours: the city of Solara Bay, the characters, the cars, the story,
+the art and the music. Nothing from Rockstar Games or any other commercial game.
 
-You are **Rico Vega**, fresh out of the marina lockup. Mara Solis has work,
-the whole bay has money, and the Solara PD has a helicopter with your name
-on it. Steal a car, run the jobs, lose the heat, and take the Big Tide.
+## The game
 
-## What is in the game
+You are **Rae Vega**, fresh off the ferry with $250 and a borrowed jacket. Marisol at the cafe
+has a plan, Dante has the jobs, and the SBPD has your photo. Work **10 story missions** — from
+*Welcome to Solara* to the noon bank job *The Big One* and the finale *King of Solara* — plus
+2 side jobs (Taxi Fare, Street Racer).
 
-- **A city to explore** — Solara Bay: a 420 m road grid, downtown towers,
-  Ocean Drive beach, Marina Bay docks and boats, palms, streetlights and 42
-  pedestrians, all procedural and seeded so the bay is the same every load.
-- **On foot and by car** — walk, sprint, steal any parked car (E), arcade
-  driving with handbrake, traffic AI looping the grid, and a Solara GT for
-  sale at Marina Motors.
-- **10 story missions** — First Wheels, Harbor Lights, Beach Run, Tide Arms,
-  Payback Cruise, Marina Money, Heat Wave, Skyline Job, Golden Hour and the
-  finale The Big Tide — plus 4 repeatable side jobs (Taxi Fare, Vigilante,
-  Courier Run, Street Race) from the pause menu.
-- **Wanted 0–5 with police that respond** — patrol cars chase and ram,
-  a police helicopter with a spotlight joins at 3 stars, roadblocks at 4+,
-  stars decay when you stay hidden, respray at Marina Motors sheds them all.
-- **Combat** — buy a pistol at Tide Arms, shoot with F or click, goons shoot
-  back, armour and health, busted / wasted drops you at Solara General.
-- **Radio** — three original synth stations (Tide FM, Palm Radio, Heat FM),
-  Q switches station, engine hum and sirens, all synthesized with WebAudio.
-- **Shops, safehouse, garage** — Tide Arms, Burger Bay, Marina Motors
-  (respray, engine tune, Solara GT), Casa Alba safehouse heals and saves.
-- **HUD + minimap** — cash, wanted stars, health / armour, ammo, mission
-  panel with timer, radio, speed, district, clock and a live minimap.
-- **Save** — localStorage save at the safehouse, on mission complete, and
-  from the pause menu; Continue on the start screen.
+- **A city to explore** on foot and by car: downtown towers, Liberty Plaza, parks, the beach
+  boardwalk and the marina, all in bright noon sun
+- **Traffic and 42 pedestrians** who stroll the sidewalks and scatter when shots ring out
+- **Cars to steal** — sedans, the Viento GT, taxis, trucks, the Palmera Limo — plus a marina
+  skiff you can buy and drive
+- **Wanted 0–5 stars**: SBPD cruisers chase and ram you, and the **police helicopter** circles
+  above at 3 stars and up
+- **Combat**: pistol, SMG and shotgun, with ammo to buy at Ironclad Arms
+- **Radio**: three stations (Solara FM, Vice Wave, Bay Beats), synthesized live with WebAudio —
+  press Q to change station
+- **Shops, safehouse, garage**: buy weapons and armor, repair and upgrade your cars, save and
+  heal at the safehouse; progress autosaves and persists in localStorage
+- **HUD**: live minimap, wanted stars, money, mission panel with distance, radio, speed,
+  health and ammo
 
 ## How to run
 
-```sh
-node serve.ts
-# open http://localhost:8080 in desktop Chrome
+No build step, no network — every file the game loads lives under `game/`.
+
+```bash
+node serve.ts        # serves game/ at http://localhost:8080
 ```
 
-No build step. `game/index.html` is the game; every script, the vendored
-three.js build and every asset live under `game/`.
+Open http://localhost:8080 in desktop Chrome and click **START NEW GAME**.
+(Or open `game/index.html` from any static file server.)
 
 ## Controls
 
 | Key | Action |
-| --- | ------ |
-| WASD / arrows | Move on foot, drive in a car |
+| --- | --- |
+| W A S D | Walk / drive |
+| Mouse | Aim, click to shoot |
+| E | Steal / enter car, use shops & safehouse |
+| Space | Brake |
 | Shift | Sprint |
-| Space | Brake / handbrake |
-| E | Enter car, exit car, shop, pickup, safehouse |
-| F or click | Shoot (needs a pistol) |
-| M | Start the next mission |
+| R | Reload · 1/2/3 switch weapon |
 | Q | Change radio station |
-| 1–3 | Buy in a shop |
-| Esc | Pause, side jobs, save |
+| M | Start the next story job |
+| P / Esc | Pause |
 
-## Entry plumbing
+## Screenshots
 
-`main.ts` (Node 22, standard library only) copies `game/` and
-`screenshots/` to the output directory and writes `dossier.json` with the
-kit's vendored `vendor/makefun-game.ts`:
+`1-cover.jpg` is the cover: a three-star police chase with the helicopter overhead at noon.
+`2-mission.jpg` starts the Hot Wheels job, `3-city.jpg` shows downtown and the beach from
+above, `4-harbor.jpg` runs the Harbor Lights job from the marina skiff. All four are real
+renders of this game running in a browser, taken with `?shot=cover|mission|city|harbor`.
 
-```sh
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-```
+## Tech
 
-Screenshots in `screenshots/` are real renders of this game in a browser
-at noon: the cover is a 3-star police pursuit with the helicopter overhead.
+- three.js (vendored under `game/vendor/`), plain ES modules, no build step
+- All sound synthesized with WebAudio — no audio files
+- `main.ts` (Node 22) copies `game/` and `screenshots/` to `/output` and writes
+  `dossier.json` with the kit's `vendor/makefun-game.ts`
 
 ## License
 
-MIT — see `LICENSE`. All city, characters, vehicles, names, story, art and
-music are original, created for this entry.
+MIT — see [LICENSE](LICENSE).

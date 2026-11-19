@@ -1,152 +1,127 @@
-// Solara Bay — audio.js
-// One clear job: all sound is synthesized with WebAudio — no audio files.
-// A tiny step sequencer plays the current radio station, plus engine,
-// siren, gunshot and pickup blips. Audio starts only after a user gesture.
-import { STATIONS } from './config.js';
+// Solara Bay — all sound is synthesized live with WebAudio: no audio files,
+// no network. Three radio stations plus the sound effects of the city.
+import { RADIO_STATIONS, TRACKS } from './config.js';
 
-const SCALES = {
-  tide: [0, 3, 5, 7, 10],
-  palm: [0, 2, 4, 7, 9],
-  heat: [0, 3, 5, 6, 10],
-};
+export function createAudio(state) {
+  const audio = {
+    ctx: null,
+    master: null,
+    musicGain: null,
+    sfxGain: null,
+    step: 0,
+    nextNote: 0,
+    trackIndex: 0,
+    trackTimer: 0,
+    sirenOsc: null,
+    started: false,
+  };
 
-export class RadioAudio {
-  constructor() {
-    this.ctx = null;
-    this.master = null;
-    this.musicGain = null;
-    this.sfxGain = null;
-    this.station = 0;
-    this.step = 0;
-    this.nextNoteAt = 0;
-    this.muted = false;
-    this.engineOsc = null;
-    this.engineGain = null;
-    this.sirenOn = false;
-    this.sirenOsc = null;
-    this.sirenGain = null;
-    this.sirenLfo = null;
-  }
-
-  startAfterGesture() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    this.ctx = new Ctx();
-    this.master = this.ctx.createGain();
-    this.master.gain.value = 0.5;
-    this.master.connect(this.ctx.destination);
-    this.musicGain = this.ctx.createGain();
-    this.musicGain.gain.value = 0.16;
-    this.musicGain.connect(this.master);
-    this.sfxGain = this.ctx.createGain();
-    this.sfxGain.gain.value = 0.5;
-    this.sfxGain.connect(this.master);
-    this.nextNoteAt = this.ctx.currentTime + 0.1;
-    this.startEngineHum();
-  }
-
-  setStation(index) {
-    this.station = ((index % STATIONS.length) + STATIONS.length) % STATIONS.length;
-    this.step = 0;
-    return STATIONS[this.station];
-  }
-
-  stationName() { return STATIONS[this.station].name; }
-
-  toggleMute() {
-    this.muted = !this.muted;
-    if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;
-    return this.muted;
-  }
-
-  startEngineHum() {
-    this.engineOsc = this.ctx.createOscillator();
-    this.engineOsc.type = 'sawtooth';
-    this.engineOsc.frequency.value = 55;
-    this.engineGain = this.ctx.createGain();
-    this.engineGain.gain.value = 0.0;
-    this.engineOsc.connect(this.engineGain);
-    this.engineGain.connect(this.master);
-    this.engineOsc.start();
-  }
-
-  setEngine(speed01, driving) {
-    if (!this.ctx || !this.engineOsc) return;
-    const target = driving ? 0.05 + speed01 * 0.06 : 0.015;
-    this.engineGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.1);
-    this.engineOsc.frequency.setTargetAtTime(50 + speed01 * 110, this.ctx.currentTime, 0.1);
-  }
-
-  setSiren(on) {
-    if (!this.ctx) return;
-    if (on === this.sirenOn) return;
-    this.sirenOn = on;
-    if (on) {
-      this.sirenOsc = this.ctx.createOscillator();
-      this.sirenOsc.type = 'sine';
-      this.sirenOsc.frequency.value = 700;
-      this.sirenGain = this.ctx.createGain();
-      this.sirenGain.gain.value = 0.04;
-      this.sirenOsc.connect(this.sirenGain);
-      this.sirenGain.connect(this.master);
-      this.sirenOsc.start();
-      const lfo = this.ctx.createOscillator();
-      lfo.frequency.value = 0.6;
-      const lfoGain = this.ctx.createGain();
-      lfoGain.gain.value = 250;
-      lfo.connect(lfoGain);
-      lfoGain.connect(this.sirenOsc.frequency);
-      lfo.start();
-      this.sirenLfo = lfo;
-    } else if (this.sirenOsc) {
-      try { this.sirenOsc.stop(); if (this.sirenLfo) this.sirenLfo.stop(); } catch (err) { /* already stopped */ }
-      this.sirenOsc = null;
+  audio.ensure = () => {
+    if (audio.ctx) {
+      if (audio.ctx.state === 'suspended') audio.ctx.resume().catch(() => {});
+      return true;
     }
-  }
-
-  blip(freq, dur, type, vol) {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = type || 'square';
-    osc.frequency.value = freq || 660;
-    gain.gain.setValueAtTime(vol || 0.2, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + (dur || 0.12));
-    osc.connect(gain); gain.connect(this.sfxGain);
-    osc.start(); osc.stop(this.ctx.currentTime + (dur || 0.12));
-  }
-
-  gunshot() { this.blip(180, 0.16, 'sawtooth', 0.35); this.blip(90, 0.2, 'square', 0.25); }
-  pickup() { this.blip(880, 0.1, 'sine', 0.25); setTimeout(() => this.blip(1320, 0.14, 'sine', 0.25), 90); }
-  cash() { this.blip(1046, 0.1, 'triangle', 0.25); setTimeout(() => this.blip(1568, 0.18, 'triangle', 0.25), 110); }
-  busted() { this.blip(220, 0.4, 'sawtooth', 0.3); }
-
-  update() {
-    if (!this.ctx || this.muted) return;
-    const st = STATIONS[this.station];
-    const scale = SCALES[st.id];
-    const stepDur = 60 / st.bpm / 2;
-    while (this.nextNoteAt < this.ctx.currentTime + 0.15) {
-      const beat = this.step % 16;
-      const degree = scale[(this.step * 7 + (this.step >> 3)) % scale.length];
-      const octave = beat % 8 === 0 ? 2 : 1;
-      const freq = st.root * Math.pow(2, degree / 12) * octave;
-      if (beat % 2 === 0) this.note(freq, stepDur * 1.8, st.wave, 0.5);
-      if (beat % 4 === 2) this.note(st.root / 2, stepDur, 'sine', 0.7);
-      if (beat % 8 === 4) this.note(st.root * 4, stepDur * 0.5, 'sine', 0.12);
-      this.step += 1;
-      this.nextNoteAt += stepDur;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      audio.ctx = new AC();
+      audio.master = audio.ctx.createGain();
+      audio.master.gain.value = 0.5;
+      audio.master.connect(audio.ctx.destination);
+      audio.musicGain = audio.ctx.createGain();
+      audio.musicGain.gain.value = 0.16;
+      audio.musicGain.connect(audio.master);
+      audio.sfxGain = audio.ctx.createGain();
+      audio.sfxGain.gain.value = 0.5;
+      audio.sfxGain.connect(audio.master);
+      audio.started = true;
+      return true;
+    } catch {
+      return false;
     }
+  };
+
+  function midiToFreq(midi) {
+    return 440 * Math.pow(2, (midi - 69) / 12);
   }
 
-  note(freq, dur, type, vol) {
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = type; osc.frequency.value = freq;
-    gain.gain.setValueAtTime(vol * 0.35, this.nextNoteAt);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.nextNoteAt + dur);
-    osc.connect(gain); gain.connect(this.musicGain);
-    osc.start(this.nextNoteAt); osc.stop(this.nextNoteAt + dur + 0.02);
+  function blip(freq, dur, type, vol, when = 0, slideTo = 0) {
+    if (!audio.ctx) return;
+    const t = audio.ctx.currentTime + when;
+    const osc = audio.ctx.createOscillator();
+    const gain = audio.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    if (slideTo > 0) osc.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain);
+    gain.connect(audio.sfxGain);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
   }
+
+  function musicNote(freq, dur, type, vol, when) {
+    if (!audio.ctx) return;
+    const t = audio.ctx.currentTime + when;
+    const osc = audio.ctx.createOscillator();
+    const gain = audio.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain);
+    gain.connect(audio.musicGain);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  }
+
+  audio.shoot = () => blip(920, 0.09, 'square', 0.22, 0, 180);
+  audio.hit = () => blip(240, 0.12, 'sawtooth', 0.2, 0, 90);
+  audio.pickup = () => { blip(660, 0.1, 'sine', 0.25); blip(990, 0.16, 'sine', 0.25, 0.09); };
+  audio.cash = () => { blip(880, 0.09, 'triangle', 0.25); blip(1174, 0.09, 'triangle', 0.25, 0.08); blip(1568, 0.2, 'triangle', 0.25, 0.16); };
+  audio.fail = () => { blip(220, 0.25, 'sawtooth', 0.2, 0, 110); blip(165, 0.4, 'sawtooth', 0.2, 0.18, 82); };
+  audio.horn = () => blip(392, 0.18, 'square', 0.14, 0, 370);
+  audio.crash = () => blip(120, 0.25, 'sawtooth', 0.3, 0, 40);
+  audio.sirenBlip = () => { blip(780, 0.22, 'sine', 0.1, 0, 1040); blip(1040, 0.22, 'sine', 0.1, 0.22, 780); };
+  audio.door = () => blip(320, 0.08, 'triangle', 0.18, 0, 180);
+  audio.reload = () => { blip(500, 0.06, 'square', 0.12); blip(700, 0.06, 'square', 0.12, 0.12); };
+
+  // Radio: a tiny step sequencer. Bass walks the station scale, a lead
+  // sparkles above it, hats tick on the off-beat. A new track every ~40 s.
+  audio.update = (dt) => {
+    if (!audio.ctx || !state.radioOn || state.mode !== 'playing') return;
+    const station = RADIO_STATIONS[state.radioIndex % RADIO_STATIONS.length];
+    const stepDur = 60 / station.bpm / 2;
+    audio.nextNote -= dt;
+    audio.trackTimer += dt;
+    if (audio.trackTimer > 42) {
+      audio.trackTimer = 0;
+      audio.trackIndex = (audio.trackIndex + 1) % TRACKS.length;
+    }
+    if (audio.nextNote > 0) return;
+    audio.nextNote = stepDur;
+    const s = audio.step;
+    const scale = station.scale;
+    const bassDegree = [0, 0, 3, 0, 4, 0, 3, 2][s % 8];
+    const bassMidi = station.root - 12 + scale[bassDegree % scale.length];
+    if (s % 2 === 0) musicNote(midiToFreq(bassMidi), stepDur * 1.8, 'sine', 0.5, 0);
+    if (s % 4 === 2) {
+      const leadDegree = scale[(s * 3 + audio.trackIndex) % scale.length];
+      musicNote(midiToFreq(station.root + 12 + leadDegree), stepDur * 1.4, station.wave, 0.12, 0);
+    }
+    if (s % 2 === 1) musicNote(midiToFreq(station.root + 24), 0.03, 'square', 0.03, 0);
+    audio.step += 1;
+  };
+
+  audio.trackName = () => TRACKS[audio.trackIndex % TRACKS.length];
+  audio.stationName = () => RADIO_STATIONS[state.radioIndex % RADIO_STATIONS.length].name;
+  audio.cycleStation = () => {
+    state.radioIndex = (state.radioIndex + 1) % RADIO_STATIONS.length;
+    audio.trackTimer = 0;
+    audio.pickup();
+  };
+  return audio;
 }
