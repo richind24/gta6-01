@@ -1,199 +1,141 @@
-// Solara Bay — the player: Juno Reyes, on foot and behind the wheel.
-// Walking, running, carjacking (E), shooting (click / F), health, armour
-// and cash. The camera lives in main.js; this module only moves Juno.
-
+// Solara Bay — player.js
+// One clear job: Rico Vega on foot and behind the wheel. Walking, sprint,
+// carjacking with E, shooting with F or click, and the damage model.
+// The camera lives in main.js; this module only moves Rico.
 import * as THREE from 'three';
-import { TUNE, clamp } from './config.js';
+import { PLAYER_TUNING } from './config.js';
+import { resolveCircle } from './city.js';
 
-export function makePlayerMesh() {
-  const g = new THREE.Group();
-  const jacket = new THREE.MeshLambertMaterial({ color: 0xff9f1c });
-  const jeans = new THREE.MeshLambertMaterial({ color: 0x2b2d42 });
-  const skin = new THREE.MeshLambertMaterial({ color: 0xe8b98a });
-  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.85, 0.36), jeans);
-  legs.position.y = 0.43;
-  g.add(legs);
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.9, 0.42), jacket);
-  torso.position.y = 1.3;
-  g.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.31, 10, 8), skin);
-  head.position.y = 2.0;
-  g.add(head);
-  const cap = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.33, 0.33, 0.12, 10),
-    new THREE.MeshLambertMaterial({ color: 0x14213d }),
+export function createPlayerMesh() {
+  const group = new THREE.Group();
+  group.name = 'rico-vega';
+  const jacket = new THREE.Mesh(
+    new THREE.BoxGeometry(1.1, 1.5, 0.6),
+    new THREE.MeshLambertMaterial({ color: 0xff6b35 }),
   );
-  cap.position.y = 2.24;
-  g.add(cap);
-  const armGeo = new THREE.BoxGeometry(0.18, 0.8, 0.18);
-  const armL = new THREE.Mesh(armGeo, jacket);
-  armL.position.set(-0.5, 1.32, 0);
-  const armR = new THREE.Mesh(armGeo, jacket);
-  armR.position.set(0.5, 1.32, 0);
-  g.add(armL); g.add(armR);
-  g.userData.armL = armL;
-  g.userData.armR = armR;
-  // A simple pistol in the right hand, visible while aiming.
+  jacket.position.y = 1.15;
+  group.add(jacket);
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.45, 12, 10),
+    new THREE.MeshLambertMaterial({ color: 0xe8b88a }),
+  );
+  head.position.y = 2.25;
+  group.add(head);
+  const legs = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.9, 0.5),
+    new THREE.MeshLambertMaterial({ color: 0x2b3a55 }),
+  );
+  legs.position.y = 0.45;
+  group.add(legs);
   const gun = new THREE.Mesh(
-    new THREE.BoxGeometry(0.12, 0.14, 0.55),
+    new THREE.BoxGeometry(0.7, 0.18, 0.18),
     new THREE.MeshLambertMaterial({ color: 0x222222 }),
   );
-  gun.position.set(0.5, 0.95, 0.3);
-  gun.name = 'gun';
-  g.add(gun);
-  return g;
+  gun.position.set(0.6, 1.4, 0.2);
+  gun.name = 'pistolMesh';
+  gun.visible = false;
+  group.add(gun);
+  return group;
 }
 
-export class Player {
-  constructor(scene, x, z) {
-    this.scene = scene;
-    this.mesh = makePlayerMesh();
-    this.mesh.position.set(x, 0, z);
-    scene.add(this.mesh);
-    this.x = x; this.z = z;
-    this.heading = 0;
-    this.speed = 0;
-    this.health = 100;
-    this.armor = 0;
-    this.money = 500;
-    this.ammo = 48;
-    this.weapon = 0; // 0 fists, 1 pistol, 2 smg
-    this.inCar = false;
-    this.car = null;
-    this.walkPhase = 0;
-    this.shootCooldown = 0;
-    this.invulnerableUntil = 0;
-    this.onShoot = null;
-    this.onDamage = null;
+export function nearestCar(cars, x, z, maxDist) {
+  let best = null, bestD = maxDist;
+  for (const car of cars) {
+    if (car.forSale) continue;
+    const d = Math.hypot(car.x - x, car.z - z);
+    if (d < bestD) { best = car; bestD = d; }
   }
+  return best;
+}
 
-  get speedKmh() {
-    return Math.abs(this.inCar && this.car ? this.car.speed : this.speed) * 3.6;
+// On-foot movement: WASD in world axes (camera looks down from the south),
+// Shift sprints, and the body faces the last move direction.
+export function updatePlayerOnFoot(G, input, dt) {
+  const p = G.player;
+  const sprint = input.sprint ? PLAYER_TUNING.sprintSpeed : PLAYER_TUNING.walkSpeed;
+  let mx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  let mz = (input.back ? 1 : 0) - (input.forward ? 1 : 0);
+  if (mx !== 0 || mz !== 0) {
+    const len = Math.hypot(mx, mz);
+    mx /= len; mz /= len;
+    p.heading = Math.atan2(mz, mx);
+    const nx = p.x + mx * sprint * dt;
+    const nz = p.z + mz * sprint * dt;
+    const [rx, rz] = resolveCircle(nx, nz, 0.9, G.colliders);
+    p.x = Math.max(-208, Math.min(208, rx));
+    p.z = Math.max(-208, Math.min(208, rz));
+    p.moving = true;
+  } else {
+    p.moving = false;
   }
+  p.mesh.position.set(p.x, 0, p.z);
+  p.mesh.rotation.y = -p.heading;
+  // Simple walk bob so the run reads on screen.
+  p.mesh.position.y = p.moving ? Math.abs(Math.sin(G.time * 10)) * 0.15 : 0;
+}
 
-  // input: {forward, back, left, right, run}
-  updateOnFoot(dt, input, city) {
-    this.shootCooldown = Math.max(0, this.shootCooldown - dt);
-    let mx = 0, mz = 0;
-    if (input.forward) mz += 1;
-    if (input.back) mz -= 1;
-    if (input.left) mx -= 1;
-    if (input.right) mx += 1;
-    const moving = mx !== 0 || mz !== 0;
-    const top = input.run ? TUNE.runSpeed : TUNE.walkSpeed;
-    if (moving) {
-      const len = Math.hypot(mx, mz);
-      mx /= len; mz /= len;
-      // Camera-relative: up is -z on screen (top-down camera looks north).
-      const tx = mx, tz = mz;
-      const wantHeading = Math.atan2(tx, tz);
-      let diff = wantHeading - this.heading;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      this.heading += diff * clamp(dt * 12, 0, 1);
-      this.speed = top;
-      this.walkPhase += dt * (input.run ? 13 : 9);
-      const nx = this.x + Math.sin(this.heading) * this.speed * dt;
-      const nz = this.z + Math.cos(this.heading) * this.speed * dt;
-      const fixed = city.resolveCircle(nx, nz, TUNE.playerRadius);
-      this.x = clamp(fixed.x, -338, 338);
-      this.z = clamp(fixed.z, -338, 338);
-    } else {
-      this.speed = 0;
+export function tryEnterCar(G) {
+  const p = G.player;
+  if (p.inCar) return false;
+  const car = nearestCar(G.parkedCars, p.x, p.z, 4.5);
+  if (!car) return false;
+  p.inCar = true;
+  p.car = car;
+  p.mesh.visible = false;
+  G.audio.blip(520, 0.08, 'square', 0.2);
+  if (G.missions) G.missions.onEnterCar();
+  return true;
+}
+
+export function exitCar(G) {
+  const p = G.player;
+  if (!p.inCar || !p.car) return;
+  const [fx, fz] = p.car.forward();
+  p.x = p.car.x - fz * 2.5;
+  p.z = p.car.z + fx * 2.5;
+  p.inCar = false;
+  p.car.speed = 0;
+  p.car = null;
+  p.mesh.visible = true;
+  p.mesh.position.set(p.x, 0, p.z);
+}
+
+// Hitscan shooting: nearest hostile within 32 m and inside a 70-degree
+// cone in front of Rico. Costs one round, sparks a tracer, hurts the target.
+export function shoot(G) {
+  const p = G.player;
+  if (p.inCar) return false;
+  if (!G.hasPistol) { G.toast('No weapon — buy a pistol at Tide Arms'); return false; }
+  if (G.ammo <= 0) { G.toast('Out of ammo — buy more at Tide Arms'); return false; }
+  if (G.time - (p.lastShot || -9) < 0.28) return false;
+  p.lastShot = G.time;
+  G.ammo -= 1;
+  G.audio.gunshot();
+  G.pedestrians.scatter(p.x, p.z);
+  // Face the nearest hostile so the shot reads as aimed.
+  let target = null, bestD = 32;
+  for (const goon of G.goons) {
+    if (goon.dead) continue;
+    const d = Math.hypot(goon.x - p.x, goon.z - p.z);
+    if (d < bestD) { target = goon; bestD = d; }
+  }
+  if (target) {
+    p.heading = Math.atan2(target.z - p.z, target.x - p.x);
+    p.mesh.rotation.y = -p.heading;
+    target.hp -= 34;
+    G.tracer(p.x, p.z, target.x, target.z);
+    if (target.hp <= 0) {
+      target.dead = true;
+      target.mesh.visible = false;
+      G.missions.onGoonDown();
+      G.addHeat(1);
     }
-    const bob = moving ? Math.abs(Math.sin(this.walkPhase)) * 0.08 : 0;
-    this.mesh.position.set(this.x, bob, this.z);
-    this.mesh.rotation.y = this.heading;
-    const swing = moving ? Math.sin(this.walkPhase) * 0.55 : 0;
-    this.mesh.userData.armL.rotation.x = swing;
-    this.mesh.userData.armR.rotation.x = -swing;
+  } else {
+    // Warning shot into the air: still draws heat.
+    const tx = p.x + Math.cos(p.heading) * 20;
+    const tz = p.z + Math.sin(p.heading) * 20;
+    G.tracer(p.x, p.z, tx, tz);
+    G.addHeat(1);
   }
-
-  enterCar(car) {
-    this.inCar = true;
-    this.car = car;
-    car.isPlayerCar = true;
-    car.isParked = false;
-    this.mesh.visible = false;
-  }
-
-  exitCar() {
-    if (!this.car) return;
-    const car = this.car;
-    car.isPlayerCar = false;
-    const side = { x: car.x + Math.cos(car.heading) * 2.4, z: car.z - Math.sin(car.heading) * 2.4 };
-    this.x = side.x; this.z = side.z;
-    this.heading = car.heading;
-    this.inCar = false;
-    this.car = null;
-    this.mesh.visible = true;
-    this.mesh.position.set(this.x, 0, this.z);
-  }
-
-  // Hitscan shot in the facing direction. Returns what was hit.
-  shoot(peds, police, traffic) {
-    if (this.shootCooldown > 0 || this.weapon === 0) return null;
-    if (this.ammo <= 0) return { kind: 'empty' };
-    this.shootCooldown = this.weapon === 2 ? 0.12 : 0.32;
-    this.ammo--;
-    if (this.onShoot) this.onShoot();
-    const range = TUNE.bulletRange;
-    // Pedestrians first.
-    const hits = peds.shotHits(this.x, this.z, this.heading, range);
-    if (hits.length > 0) {
-      const target = hits[0].ped;
-      peds.knockDown(target);
-      return { kind: 'ped', dist: hits[0].dist };
-    }
-    // Police cars in the cone.
-    let best = null, bestD = range;
-    for (const car of police.cars) {
-      if (car.dead) continue;
-      const dx = car.x - this.x, dz = car.z - this.z;
-      const d = Math.hypot(dx, dz);
-      if (d > range) continue;
-      const ang = Math.atan2(dx, dz);
-      let diff = ang - this.heading;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      if (Math.abs(diff) < 0.3 && d < bestD) { bestD = d; best = car; }
-    }
-    if (best) {
-      best.speed *= 0.3;
-      return { kind: 'police', dist: bestD };
-    }
-    return { kind: 'miss' };
-  }
-
-  damage(amount, now) {
-    if (now < this.invulnerableUntil) return false;
-    this.invulnerableUntil = now + 0.6;
-    let rest = amount;
-    if (this.armor > 0) {
-      const absorbed = Math.min(this.armor, rest);
-      this.armor -= absorbed;
-      rest -= absorbed;
-    }
-    this.health -= rest;
-    if (this.onDamage) this.onDamage(amount);
-    return this.health <= 0;
-  }
-
-  heal(amount) { this.health = clamp(this.health + amount, 0, 100); }
-
-  addMoney(n) { this.money = Math.max(0, this.money + n); }
-
-  resetTo(x, z) {
-    if (this.inCar) {
-      this.car.isPlayerCar = false;
-      this.car = null;
-      this.inCar = false;
-      this.mesh.visible = true;
-    }
-    this.x = x; this.z = z;
-    this.heading = 0;
-    this.health = 100;
-    this.mesh.position.set(x, 0, z);
-    this.invulnerableUntil = performance.now() / 1000 + 2;
-  }
+  return true;
 }

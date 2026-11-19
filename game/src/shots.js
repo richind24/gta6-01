@@ -1,89 +1,84 @@
-// Solara Bay — deterministic screenshot setups. The game reads ?shot=
-// from the URL; each name stages a bright noon scene with the HUD dense
-// and something happening, so the cover and the other screenshots are
-// real renders of the same code the player runs. Nothing here edits the
-// game: it only moves the player, the police and the camera presets.
+// Solara Bay — shots.js
+// One clear job: deterministic screenshot setups. The game reads ?shot=
+// from the URL; each name stages a bright noon scene with a dense HUD and
+// something happening, so the cover and the other screenshots are real
+// renders of the same code the player runs. Nothing here edits the game:
+// it only moves the player, the police and the mission state, then flags
+// the frame ready for the screenshot tool.
+import { STORY } from './config.js';
 
-import { LANDMARKS } from './config.js';
-
-export const SHOT_NAMES = ['cover', 'mission', 'city', 'harbor'];
-
-export function applyShot(world, name) {
-  const { player, police, traffic, missions, city, peds } = world;
-  // Every shot is noon: bright sun, saturated sky, no dusk.
-  world.setTimeOfDay(12.0);
-  world.hideMenu();
-  const putCar = (x, z, heading) => {
-    const car = traffic.nearestStealable(x, z, 400);
-    if (!car) return null;
-    car.x = x; car.z = z; car.heading = heading;
-    car.sync();
-    return car;
-  };
-  if (name === 'cover') {
-    // Noon pursuit down the beach road: red GT, two cruisers on its tail,
-    // helicopter overhead, sea on the left, mission 7 active. The road
-    // corridor keeps buildings out of the camera's way.
-    const car = putCar(232, 40, 0);
-    if (car) {
-      player.enterCar(car);
-      car.speed = 24;
-      car.mesh.children[0].material.color.setHex(0xe63946);
-    }
-    player.x = 232; player.z = 40;
-    police.setWanted(3, true);
-    police.spawnTimer = 0;
-    // One cruiser ahead in the frame (it chases back toward the player),
-    // one behind (it chases into the frame).
-    police.spawnCarAt(224, 78, 0);
-    police.spawnCarAt(238, 14, 0);
-    const ahead = traffic.cars.find((c) => c.isTraffic && !c.dead);
-    if (ahead) { ahead.x = 236; ahead.z = 96; ahead.heading = 0; ahead.sync(); }
-    if (!missions.active && missions.index <= 6) {
-      missions.index = 6;
-      missions.startNext();
-    }
-    world.setCameraPreset('chase');
-  } else if (name === 'mission') {
-    // On foot at the harbour, crates mission active, beacon glowing.
-    player.resetTo(160, 250);
-    if (!missions.active) {
-      missions.index = 3;
-      missions.startNext();
-    }
-    peds.spawnAt(138, 236, 0xe9c46a);
-    peds.spawnAt(178, 262, 0x2a9d8f);
-    world.setCameraPreset('follow');
-  } else if (name === 'city') {
-    // Downtown avenue drive: Juno eastbound on the -8 avenue, traffic
-    // ahead, a patrol car behind, towers lining the road.
-    const car = putCar(-120, -8, Math.PI / 2);
-    if (car) { player.enterCar(car); car.speed = 20; }
-    player.x = -120; player.z = -8;
-    police.setWanted(1, true);
-    police.spawnCarAt(-152, -8, Math.PI / 2);
-    const movers = traffic.cars.filter((c) => c.isTraffic && !c.dead);
-    if (movers[0]) { movers[0].x = -40; movers[0].z = -8; movers[0].heading = Math.PI / 2; movers[0].sync(); }
-    if (movers[1]) { movers[1].x = 24; movers[1].z = -8; movers[1].heading = Math.PI / 2; movers[1].sync(); }
-    if (!missions.active) {
-      missions.index = 1;
-      missions.startNext();
-    }
-    world.setCameraPreset('chase');
-  } else if (name === 'harbor') {
-    // On the docks: containers, cranes and the water at the bottom of
-    // the frame, crates mission active with its beacon in view.
-    player.resetTo(152, 280);
-    if (!missions.active) {
-      missions.index = 3;
-      missions.startNext();
-    }
-    peds.spawnAt(164, 292, 0x457b9d);
-    world.setCameraPreset('follow');
-  }
-  world.shotReady = true;
+function putPlayerInCar(G, carIndex, x, z, heading) {
+  const car = G.parkedCars[carIndex % G.parkedCars.length];
+  car.x = x; car.z = z; car.heading = heading; car.speed = 20;
+  car.syncMesh();
+  G.player.inCar = true;
+  G.player.car = car;
+  G.player.x = x; G.player.z = z;
+  G.player.mesh.visible = false;
 }
 
-export function shotList() {
-  return SHOT_NAMES.map((n, i) => `${i + 1}-${n}.jpg`);
+function startMissionAt(G, index) {
+  G.missions.missionIndex = index;
+  G.missions.side = null;
+  G.missions.active = false;
+  G.missions.startCurrent();
+}
+
+export function stageShot(G, name) {
+  G.shotName = name;
+  // Every shot is noon: the sun never moves for the camera.
+  G.clockMinutes = 12 * 60;
+  if (name === 'cover') {
+    // Noon police pursuit: Rico in a red sedan crossing Downtown, 3 stars,
+    // helicopter overhead, patrol cars closing in, mission 2 on the HUD.
+    putPlayerInCar(G, 0, -30, 0, 0);
+    // The cover car reads best in bright red.
+    G.player.car.mesh.children[0].material.color.setHex(0xe63946);
+    G.police.setWanted(3);
+    G.police.ensureHeli(G);
+    // Park the helicopter north of the player at screenshot time
+    // (it drifts 0.55 rad/s, the shot lands ~2.2 s after staging).
+    G.police.heliAngle = 3.5;
+    startMissionAt(G, 1);
+    G.cash = 12450;
+    G.health = 86;
+    G.ammo = 42;
+    G.hasPistol = true;
+    G.cameraPreset = 'chase';
+  } else if (name === 'mission') {
+    // Harbor Lights on foot at the east docks, package beacon live.
+    G.player.x = 168; G.player.z = 40;
+    G.player.mesh.position.set(168, 0, 40);
+    G.hasPistol = true; G.ammo = 60;
+    startMissionAt(G, 1);
+    G.police.setWanted(1);
+    G.cash = 8300;
+    G.cameraPreset = 'close';
+  } else if (name === 'city') {
+    // Downtown drive with traffic and a patrol car in the mirror.
+    putPlayerInCar(G, 2, -30, 0, 0);
+    G.police.setWanted(1);
+    startMissionAt(G, 0);
+    G.cash = 5200;
+    G.cameraPreset = 'chase';
+  } else if (name === 'harbor') {
+    // Marina Bay at noon: the GT by the docks, mission 6 collecting drops.
+    putPlayerInCar(G, G.parkedCars.length - 1, 150, 100, Math.PI / 2);
+    G.player.car.speed = 0;
+    startMissionAt(G, 5);
+    G.police.setWanted(0);
+    G.cash = 21400;
+    G.health = 100;
+    G.cameraPreset = 'wide';
+  }
+  G.shotReadyAt = G.time + 1.4;
+}
+
+export function shotTitle(name) {
+  return {
+    cover: 'Noon police pursuit — 3 stars, helicopter, mission active',
+    mission: 'Harbor Lights on foot at the east docks',
+    city: 'Downtown drive with traffic and a patrol car',
+    harbor: 'Marina Bay and the harbour at noon',
+  }[name] || 'Solara Bay';
 }

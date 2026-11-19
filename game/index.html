@@ -3,154 +3,127 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Solara Bay — Open-World Crime</title>
+<title>Solara Bay — an open-world crime game</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #0e2a3a;
-    font-family: 'Trebuchet MS', Verdana, sans-serif; color: #fff; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-  .hud { position: fixed; z-index: 5; pointer-events: none; text-shadow: 0 2px 4px rgba(0,0,0,.7); }
-  #hud-tl { top: 14px; left: 16px; }
-  #cash { font-size: 30px; font-weight: 900; color: #7dff8a; letter-spacing: 1px; }
-  .bar { width: 190px; height: 11px; background: rgba(0,0,0,.55); border: 1px solid #fff3;
-    border-radius: 6px; margin-top: 5px; overflow: hidden; }
-  .bar > div { height: 100%; transition: width .2s; }
-  #health-fill { background: linear-gradient(90deg, #ff5964, #ff8e53); width: 100%; }
-  #armor-fill { background: linear-gradient(90deg, #4cc9f0, #4361ee); width: 0%; }
-  .bar-label { font-size: 11px; letter-spacing: 2px; opacity: .85; margin-top: 2px; }
-  #hud-tr { top: 14px; right: 16px; text-align: right; }
-  #stars { font-size: 26px; letter-spacing: 3px; color: #ffd23f; }
-  #clock { font-size: 22px; font-weight: 800; }
-  #district { font-size: 14px; opacity: .9; }
-  #wanted-label { font-size: 12px; color: #ffb3b3; }
-  #hud-mission { top: 14px; left: 50%; transform: translateX(-50%); width: 460px;
-    background: rgba(10, 25, 47, .72); border: 1px solid #ffffff33; border-radius: 10px;
-    padding: 10px 14px; text-align: center; }
-  #mission-title { font-size: 12px; letter-spacing: 3px; color: #ffd23f; font-weight: 800; }
-  #mission-text { font-size: 15px; margin-top: 3px; line-height: 1.35; }
-  #objective-dist { font-size: 13px; color: #7dff8a; font-weight: 700; }
-  #hud-bl { bottom: 14px; left: 16px; }
-  #minimap { width: 180px; height: 180px; border: 2px solid #ffffff88; border-radius: 8px;
-    background: #0e2a3a; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
-  #hud-br { bottom: 14px; right: 16px; text-align: right; }
-  #speed { font-size: 34px; font-weight: 900; }
-  #radio-name { font-size: 17px; font-weight: 800; }
-  #radio-tag { font-size: 12px; opacity: .85; }
-  #ammo { font-size: 14px; margin-top: 4px; color: #ffe066; font-weight: 700; }
-  #toast { position: fixed; bottom: 210px; left: 50%; transform: translateX(-50%); z-index: 6;
-    background: rgba(10, 25, 47, .85); border: 1px solid #ffd23f88; color: #fff;
-    padding: 10px 18px; border-radius: 999px; font-size: 15px; font-weight: 700;
-    opacity: 0; transition: opacity .3s; pointer-events: none; text-align: center; max-width: 80vw; }
-  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center;
-    justify-content: center; background: radial-gradient(ellipse at center, rgba(10,40,70,.55), rgba(4,12,24,.88)); }
-  .card { width: 620px; max-width: 92vw; background: rgba(8, 22, 40, .92); border: 2px solid #ffd23f55;
-    border-radius: 16px; padding: 30px 34px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
-  .card h1 { font-size: 52px; letter-spacing: 4px; color: #ffd23f;
-    text-shadow: 0 3px 0 #e63946, 0 8px 24px rgba(0,0,0,.6); }
-  .card h2 { font-size: 15px; letter-spacing: 6px; color: #2ec4b6; margin: 6px 0 14px; }
-  .card p { font-size: 15px; line-height: 1.55; opacity: .92; margin-bottom: 10px; }
-  .card .controls { font-size: 13px; line-height: 1.9; background: rgba(255,255,255,.06);
-    border-radius: 10px; padding: 12px; margin: 12px 0; text-align: left; }
-  .card .controls b { color: #ffd23f; }
-  .big-btn { pointer-events: auto; cursor: pointer; font-size: 18px; font-weight: 900;
-    letter-spacing: 1px; color: #10222e; background: linear-gradient(180deg, #ffd23f, #ff9f1c);
-    border: none; border-radius: 999px; padding: 13px 34px; margin: 6px 4px 0; }
-  .big-btn:hover { filter: brightness(1.1); }
-  .big-btn.ghost { background: transparent; color: #fff; border: 2px solid #ffffff66; font-size: 15px; }
-  #panel { display: none; position: fixed; z-index: 9; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 420px; max-width: 92vw; background: rgba(8, 22, 40, .95); border: 2px solid #2ec4b6;
-    border-radius: 14px; padding: 22px; }
-  #panel-title { font-size: 20px; color: #2ec4b6; margin-bottom: 12px; }
-  .shop-btn { display: block; width: 100%; cursor: pointer; font-size: 15px; font-weight: 700;
-    color: #fff; background: #1d3557; border: 1px solid #ffffff33; border-radius: 8px;
-    padding: 10px 12px; margin-bottom: 8px; text-align: left; }
-  .shop-btn:hover:not(:disabled) { background: #2a4a73; }
-  .shop-btn:disabled { opacity: .45; cursor: default; }
-  .shop-btn.ghost { background: transparent; text-align: center; }
-  #pause, #end { display: none; }
-  #end-title { font-size: 46px; color: #ff5964; }
-  .hint { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 4;
-    font-size: 12px; opacity: .75; text-shadow: 0 1px 3px #000; pointer-events: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #7ec8f7; font-family: Arial, Helvetica, sans-serif; }
+  #game-canvas { position: fixed; inset: 0; }
+  #game-canvas canvas { display: block; }
+  #damage-flash { position: fixed; inset: 0; background: #ff2222; opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 30; }
+  /* ---- HUD ---- */
+  #hud { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 10; color: #fff; }
+  .panel { background: rgba(10, 25, 40, 0.72); border: 1px solid rgba(255,255,255,0.25); border-radius: 10px; padding: 8px 12px; }
+  #hud-top-right { position: absolute; top: 12px; right: 12px; text-align: right; }
+  #hud-cash { font-size: 30px; font-weight: 900; color: #7dff8a; text-shadow: 2px 2px 0 #000; }
+  #hud-stars { font-size: 26px; letter-spacing: 3px; text-shadow: 2px 2px 0 #000; }
+  #hud-mission { position: absolute; top: 12px; left: 12px; max-width: 380px; }
+  #hud-mission-title { font-size: 17px; font-weight: 900; color: #ffd23f; text-shadow: 1px 1px 0 #000; }
+  #hud-mission-text { font-size: 14px; margin-top: 3px; line-height: 1.35; }
+  #hud-mission-timer { font-size: 16px; font-weight: 900; color: #ff8fa3; margin-top: 2px; }
+  #hud-bars { position: absolute; left: 12px; bottom: 204px; width: 210px; }
+  .bar-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; font-weight: 700; text-shadow: 1px 1px 0 #000; }
+  .bar { flex: 1; height: 12px; background: rgba(0,0,0,0.55); border-radius: 6px; overflow: hidden; }
+  .bar > div { height: 100%; }
+  #hud-health-fill { background: #2ecc71; width: 100%; }
+  #hud-armor-fill { background: #35c8ff; width: 0%; }
+  #hud-ammo { font-size: 13px; font-weight: 700; text-shadow: 1px 1px 0 #000; margin-top: 4px; }
+  #minimap-wrap { position: absolute; left: 12px; bottom: 12px; }
+  #minimap { width: 180px; height: 180px; border: 2px solid rgba(255,255,255,0.6); border-radius: 8px; display: block; }
+  #hud-bottom-right { position: absolute; right: 12px; bottom: 12px; text-align: right; }
+  #hud-speed { font-size: 34px; font-weight: 900; text-shadow: 2px 2px 0 #000; }
+  #hud-radio { font-size: 14px; font-weight: 800; text-shadow: 1px 1px 0 #000; margin-top: 2px; }
+  #hud-district { font-size: 15px; font-weight: 800; text-shadow: 1px 1px 0 #000; }
+  #hud-clock { font-size: 14px; font-weight: 700; text-shadow: 1px 1px 0 #000; }
+  #hud-toast { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); background: rgba(10,25,40,0.85); border: 1px solid #ffd23f; color: #ffd23f; font-weight: 800; font-size: 16px; padding: 8px 18px; border-radius: 20px; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  #hud-help { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.9); text-shadow: 1px 1px 0 #000; background: rgba(0,0,0,0.35); padding: 4px 10px; border-radius: 12px; }
+  /* ---- screens ---- */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 20; color: #fff; text-align: center; background: linear-gradient(160deg, rgba(10,60,110,0.88), rgba(255,140,40,0.72)); }
+  .screen h1 { font-size: 64px; font-weight: 900; letter-spacing: 2px; text-shadow: 4px 4px 0 rgba(0,0,0,0.45); }
+  .screen h2 { font-size: 22px; font-weight: 700; margin: 8px 0 4px; color: #ffd23f; text-shadow: 2px 2px 0 #000; }
+  .screen p { max-width: 620px; font-size: 15px; line-height: 1.5; margin: 10px 0; text-shadow: 1px 1px 0 #000; }
+  .screen .controls { font-size: 13px; background: rgba(0,0,0,0.4); border-radius: 10px; padding: 10px 16px; margin: 8px 0 16px; line-height: 1.7; }
+  .big-btn { pointer-events: auto; cursor: pointer; font-size: 19px; font-weight: 900; color: #082338; background: #ffd23f; border: none; border-radius: 12px; padding: 13px 34px; margin: 5px; box-shadow: 0 4px 0 #b8860b; }
+  .big-btn:hover { background: #ffe066; }
+  .big-btn.secondary { background: #35c8ff; box-shadow: 0 4px 0 #0e6a8a; color: #06283a; }
+  #pause-panel, #complete-panel { display: none; background: rgba(8, 30, 50, 0.92); }
+  #pause-panel h1, #complete-panel h1 { font-size: 40px; }
+  .job-btn { pointer-events: auto; display: block; width: 480px; max-width: 90vw; cursor: pointer; font-size: 15px; font-weight: 700; text-align: left; color: #fff; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.35); border-radius: 8px; padding: 10px 14px; margin: 5px 0; }
+  .job-btn:hover { background: rgba(255,255,255,0.25); }
+  #shop-panel { display: none; position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 25; background: rgba(10,25,40,0.92); border: 2px solid #ffd23f; border-radius: 12px; padding: 16px; color: #fff; width: 360px; }
+  #shop-title { font-size: 18px; font-weight: 900; color: #ffd23f; margin-bottom: 10px; }
+  .shop-item { display: block; width: 100%; cursor: pointer; font-size: 15px; font-weight: 700; text-align: left; color: #fff; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.35); border-radius: 8px; padding: 10px 12px; margin: 6px 0; }
+  .shop-item:hover { background: rgba(255,210,63,0.3); }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.min.js" } }
 </script>
 </head>
 <body>
-<canvas id="game"></canvas>
+<div id="game-canvas"></div>
+<div id="damage-flash"></div>
 
-<div class="hud" id="hud-tl">
-  <div id="cash">$500</div>
-  <div class="bar"><div id="health-fill"></div></div>
-  <div class="bar-label">HEALTH</div>
-  <div class="bar"><div id="armor-fill"></div></div>
-  <div class="bar-label">ARMOUR</div>
+<div id="hud">
+  <div id="hud-mission" class="panel">
+    <div id="hud-mission-title">SOLARA BAY</div>
+    <div id="hud-mission-text">Press M to start the story.</div>
+    <div id="hud-mission-timer"></div>
+  </div>
+  <div id="hud-top-right" class="panel">
+    <div id="hud-cash">$250</div>
+    <div id="hud-stars">☆☆☆☆☆</div>
+  </div>
+  <div id="hud-bars" class="panel">
+    <div class="bar-row"><span>HP</span><div class="bar"><div id="hud-health-fill"></div></div><span id="hud-health-text">HP 100</span></div>
+    <div class="bar-row"><span>ARMOR</span><div class="bar"><div id="hud-armor-fill"></div></div></div>
+    <div id="hud-ammo">🔫 no weapon</div>
+  </div>
+  <div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas></div>
+  <div id="hud-bottom-right" class="panel">
+    <div id="hud-speed">ON FOOT</div>
+    <div id="hud-radio">♪ TIDE FM 101.1 — Solara Surf</div>
+    <div id="hud-district">Downtown</div>
+    <div id="hud-clock">12:00 • Day 1</div>
+  </div>
+  <div id="hud-toast"></div>
+  <div id="hud-help">WASD move / drive • E enter car, shop, pickup • F shoot • M mission • Q radio • Esc pause</div>
 </div>
 
-<div class="hud" id="hud-tr">
-  <div id="stars">☆☆☆☆☆</div>
-  <div id="wanted-label">Clean</div>
-  <div id="clock">12:00</div>
-  <div id="district">Solara Bay</div>
+<div id="start-screen" class="screen">
+  <h1>SOLARA BAY</h1>
+  <h2>An open-world crime story — 10 missions, police chases, a helicopter, radio</h2>
+  <p>You are Rico Vega, fresh out of the marina lockup. Mara Solis has work, the whole bay
+  has money, and the Solara PD has a helicopter with your name on it. Steal a car, run the
+  jobs, lose the heat, and take the Big Tide.</p>
+  <div class="controls">WASD move &amp; drive • Shift sprint • E enter car / shop / pickup / safehouse •
+  F or click shoot • M start mission • Q change radio • Space brake • Esc pause &amp; side jobs</div>
+  <div>
+    <button id="btn-new" class="big-btn">▶ NEW GAME</button>
+    <button id="btn-continue" class="big-btn secondary">↻ CONTINUE</button>
+  </div>
+  <p id="save-state-label" style="font-size:13px; opacity:0.9;">No save yet</p>
 </div>
 
-<div class="hud" id="hud-mission">
-  <div id="mission-title">SOLARA BAY</div>
-  <div id="mission-text">Press N to start mission 1</div>
-  <div id="objective-dist"></div>
-</div>
-
-<div class="hud" id="hud-bl"><canvas id="minimap" width="180" height="180"></canvas></div>
-
-<div class="hud" id="hud-br">
-  <div id="speed">ON FOOT</div>
-  <div id="radio-name">♪ SOLARA FM</div>
-  <div id="radio-tag">SOLARA FM 101.1 — Sunny Pop</div>
-  <div id="ammo">FISTS</div>
-</div>
-
-<div id="toast"></div>
-<div class="hint">WASD drive / walk &nbsp;·&nbsp; E enter car / interact &nbsp;·&nbsp; Click or F shoot &nbsp;·&nbsp; N mission &nbsp;·&nbsp; J taxi · K vigilante · L courier &nbsp;·&nbsp; R radio &nbsp;·&nbsp; P pause</div>
-
-<div id="panel"><div id="panel-title"></div><div id="panel-body"></div></div>
-
-<div class="overlay" id="menu">
-  <div class="card">
-    <h1>SOLARA BAY</h1>
-    <h2>AN OPEN-WORLD CRIME STORY</h2>
-    <p>Juno Reyes is back in Solara Bay — sun, surf and a city that owes her
-    everything. Run 10 story missions for Mama Bay and Don Caspian, dodge the
-    Solara PD (and their helicopter), steal cars, buy the marina, and become
-    the King of Solara Bay.</p>
-    <div class="controls">
-      <b>WASD / Arrows</b> — walk &amp; drive &nbsp;·&nbsp; <b>Shift</b> — run<br>
-      <b>E</b> — steal / exit car, talk &amp; shop &nbsp;·&nbsp; <b>Click / F</b> — shoot<br>
-      <b>N</b> — start next story mission &nbsp;·&nbsp; <b>J / K / L</b> — taxi / vigilante / courier<br>
-      <b>R</b> — next radio station &nbsp;·&nbsp; <b>1 / 2 / 3</b> — pick a station &nbsp;·&nbsp; <b>M</b> — mute<br>
-      <b>P</b> — pause &nbsp;·&nbsp; Save at the safehouse (Casa Juno) or automatically every 30s
-    </div>
-    <button class="big-btn" id="btn-start">▶ &nbsp;NEW GAME</button>
-    <button class="big-btn ghost" id="btn-continue">CONTINUE</button>
-    <p style="margin-top:14px; font-size:12px; opacity:.7;">10 story missions · side jobs · 5-star wanted · police helicopter ·
-    3 radio stations · shops · safehouse · garage · marina · saves</p>
+<div id="pause-panel" class="screen">
+  <h1>PAUSED</h1>
+  <p id="pause-save-label">No save yet</p>
+  <h2>Side jobs — repeatable work around the bay</h2>
+  <div id="side-jobs"></div>
+  <div>
+    <button id="btn-resume" class="big-btn">▶ RESUME</button>
+    <button id="btn-save-quit" class="big-btn secondary">💾 SAVE &amp; MENU</button>
   </div>
 </div>
 
-<div class="overlay" id="pause">
-  <div class="card">
-    <h1 style="font-size:38px;">PAUSED</h1>
-    <p>Solara Bay waits for no one. Except right now.</p>
-    <button class="big-btn" id="btn-resume">RESUME</button>
-    <button class="big-btn ghost" id="btn-quit">QUIT TO MENU</button>
-  </div>
+<div id="shop-panel">
+  <div id="shop-title">SHOP</div>
+  <div id="shop-items"></div>
+  <p style="font-size:12px; opacity:0.8; margin-top:8px;">Click an item or press 1–3. Esc leaves.</p>
 </div>
 
-<div class="overlay" id="end">
-  <div class="card">
-    <h1 id="end-title">BUSTED!</h1>
-    <p id="end-text"></p>
-    <button class="big-btn" id="btn-respawn">PATCH UP &amp; GO AGAIN</button>
-  </div>
+<div id="complete-panel" class="screen">
+  <h1 id="complete-title">STORY COMPLETE</h1>
+  <p id="complete-text"></p>
+  <button id="btn-complete-close" class="big-btn">KEEP EXPLORING</button>
 </div>
 
 <script type="module" src="./src/main.js"></script>

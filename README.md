@@ -4,76 +4,78 @@
 
 # Solara Bay — an open-world crime game
 
-Juno Reyes is back in Solara Bay: sun, surf, and a city that owes her
-everything. Run **10 story missions** for Mama Bay and Don Caspian, dodge
-the Solara PD and their helicopter, steal cars, buy the marina, and become
-the King of Solara Bay.
+An entry for the [make.fun "Make GTA 6" bounty (gta6-01)](https://make.fun/bounty/gta6-01).
+A complete, original, sun-soaked open-world crime game that runs offline in
+desktop Chrome from static files — no build step, no network requests.
 
-An entry for the [Make GTA 6 bounty](https://make.fun/bounty/gta6-01) on
-[make.fun](https://make.fun). Built from scratch in a recorded session with
-three.js — no Rockstar names, art, music or maps, everything here is
-original.
+You are **Rico Vega**, fresh out of the marina lockup. Mara Solis has work,
+the whole bay has money, and the Solara PD has a helicopter with your name
+on it. Steal a car, run the jobs, lose the heat, and take the Big Tide.
 
-## What's in the game
+## What is in the game
 
-- **A living city**: 8×8 blocks of downtown towers, El Barrio, Palm Heights,
-  Solara Beach and the Harbour docks — traffic AI, 42 pedestrians, palms,
-  boats, cranes and containers.
-- **10 story missions** + repeatable side work: taxi fares, vigilante chases,
-  courier runs and 10 hidden packages.
-- **Wanted 0–5 stars**: patrol cars chase, roadblocks at 4 stars, a police
-  helicopter with a spotlight from 3 stars. Busted or wasted costs cash.
-- **Driving & combat**: steal any parked car (E), arcade handling, on-foot
-  shooting (click / F), pistol and SMG, body armour.
-- **Economy**: earn mission payouts, buy guns at Solara Arms, eat at Tide
-  Burger, tune cars at Neon Garage, buy Marina Bay for passive income.
-- **Radio**: three original synthesized stations — Solara FM, Bay Beats,
-  Neon Nights (R to change, 1/2/3 to pick, M to mute). No audio files.
-- **HUD**: minimap with live blips, wanted stars, cash, health/armour,
-  mission panel with distance, radio display and speed.
-- **Saves**: safehouse save (Casa Juno) plus autosave every 30 seconds.
-  Continue from the start screen.
+- **A city to explore** — Solara Bay: a 420 m road grid, downtown towers,
+  Ocean Drive beach, Marina Bay docks and boats, palms, streetlights and 42
+  pedestrians, all procedural and seeded so the bay is the same every load.
+- **On foot and by car** — walk, sprint, steal any parked car (E), arcade
+  driving with handbrake, traffic AI looping the grid, and a Solara GT for
+  sale at Marina Motors.
+- **10 story missions** — First Wheels, Harbor Lights, Beach Run, Tide Arms,
+  Payback Cruise, Marina Money, Heat Wave, Skyline Job, Golden Hour and the
+  finale The Big Tide — plus 4 repeatable side jobs (Taxi Fare, Vigilante,
+  Courier Run, Street Race) from the pause menu.
+- **Wanted 0–5 with police that respond** — patrol cars chase and ram,
+  a police helicopter with a spotlight joins at 3 stars, roadblocks at 4+,
+  stars decay when you stay hidden, respray at Marina Motors sheds them all.
+- **Combat** — buy a pistol at Tide Arms, shoot with F or click, goons shoot
+  back, armour and health, busted / wasted drops you at Solara General.
+- **Radio** — three original synth stations (Tide FM, Palm Radio, Heat FM),
+  Q switches station, engine hum and sirens, all synthesized with WebAudio.
+- **Shops, safehouse, garage** — Tide Arms, Burger Bay, Marina Motors
+  (respray, engine tune, Solara GT), Casa Alba safehouse heals and saves.
+- **HUD + minimap** — cash, wanted stars, health / armour, ammo, mission
+  panel with timer, radio, speed, district, clock and a live minimap.
+- **Save** — localStorage save at the safehouse, on mission complete, and
+  from the pause menu; Continue on the start screen.
 
-## How to play
+## How to run
 
 ```sh
-# Serve the game folder with any static server, then open it in desktop Chrome:
 node serve.ts
-# → http://localhost:8080
-# or:
-python3 -m http.server 8080 --directory game
+# open http://localhost:8080 in desktop Chrome
 ```
 
+No build step. `game/index.html` is the game; every script, the vendored
+three.js build and every asset live under `game/`.
+
+## Controls
+
 | Key | Action |
-| --- | --- |
-| WASD / Arrows | Walk & drive (Shift to run) |
-| E | Steal / exit car, interact & shop |
-| Click / F | Shoot |
-| N | Start next story mission |
-| J / K / L | Taxi fare / vigilante / courier |
-| R, 1 / 2 / 3, M | Radio next / pick station / mute |
-| P | Pause |
+| --- | ------ |
+| WASD / arrows | Move on foot, drive in a car |
+| Shift | Sprint |
+| Space | Brake / handbrake |
+| E | Enter car, exit car, shop, pickup, safehouse |
+| F or click | Shoot (needs a pistol) |
+| M | Start the next mission |
+| Q | Change radio station |
+| 1–3 | Buy in a shop |
+| Esc | Pause, side jobs, save |
 
-Screenshot shortcuts (for the cover shots): open the game with
-`?shot=cover`, `?shot=mission`, `?shot=city` or `?shot=harbor` to stage a
-bright noon scene with the HUD and the action already running.
+## Entry plumbing
 
-## Tech
+`main.ts` (Node 22, standard library only) copies `game/` and
+`screenshots/` to the output directory and writes `dossier.json` with the
+kit's vendored `vendor/makefun-game.ts`:
 
-- `game/index.html` — page + HUD
-- `game/src/main.js` — bootstrap, loop, menus, shops, camera, day cycle
-- `game/src/city.js` — procedural city, beach, harbour, collision
-- `game/src/vehicles.js` — cars, driving physics, traffic AI
-- `game/src/pedestrians.js` — sidewalk walkers
-- `game/src/police.js` — wanted system, chases, helicopter, roadblocks
-- `game/src/player.js` — Juno on foot and behind the wheel
-- `game/src/missions.js` — 10 story missions + side jobs
-- `game/src/hud.js` — HUD + live minimap
-- `game/src/audio.js` — synthesized radio & sound effects (WebAudio)
-- `game/src/save.js` — localStorage saves
-- `game/src/shots.js` — deterministic screenshot setups
-- `game/vendor/three.module.min.js` — three.js 0.160.0 (vendored, MIT)
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+```
+
+Screenshots in `screenshots/` are real renders of this game in a browser
+at noon: the cover is a 3-star police pursuit with the helicopter overhead.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see `LICENSE`. All city, characters, vehicles, names, story, art and
+music are original, created for this entry.
